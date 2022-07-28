@@ -1,0 +1,66 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:YouTubeDlpGui.ViewModels"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="450" d:DesignHeight="450"
+        x:Class="YouTubeDlpGui.Views.MainWindow"
+        Icon="/Assets/avalonia-logo.ico"
+        Title="YouTubeDlpGui"
+        SizeToContent="WidthAndHeight"
+        CanResize="False"
+        Padding="20"
+        TransparencyLevelHint="AcrylicBlur">
+
+    <Design.DataContext>
+        <vm:MainWindowViewModel />
+    </Design.DataContext>
+
+    <Window.Styles>
+        <Style Selector="TextBlock.red">
+            <Setter Property="Foreground" Value="Red" />
+        </Style>
+    </Window.Styles>
+
+    <StackPanel>
+        <TextBlock Name="ErrorTextBlock" Classes="red" IsVisible="False" />
+        <TextBlock>YouTube Video URL</TextBlock>
+        <TextBox Margin="10" Name="UrlTextBox" Watermark="https://www.youtube.com/watch?v=dQw4w9WgXcQ" />
+        <WrapPanel>
+            <TextBox Margin="10" Name="VideoDownloadPathTextBox" MinWidth="300"/>
+            <Button Margin="10" Name="VideoDownloadPathButton" Content="..."
+                    Command="{Binding OnVideoDownloadPathButtonClicked}" HorizontalAlignment="Right" />
+        </WrapPanel>
+        <WrapPanel>
+            <StackPanel Margin="10">
+                <TextBlock>Download</TextBlock>
+                <TextBlock>Format:</TextBlock>
+            </StackPanel>
+            <ComboBox Margin="10" SelectedIndex="0">
+                <ComboBoxItem>webm</ComboBoxItem>
+                <ComboBoxItem>mp4</ComboBoxItem>
+            </ComboBox>
+            <StackPanel Margin="10">
+                <TextBlock>Final</TextBlock>
+                <TextBlock>Format:</TextBlock>
+            </StackPanel>
+            <ComboBox Margin="10" SelectedIndex="0">
+                <ComboBoxItem>mp4</ComboBoxItem>
+                <ComboBoxItem>webm</ComboBoxItem>
+            </ComboBox>
+        </WrapPanel>
+        <Button Margin="10" Name="DownloadButton" IsEnabled="True" Content="Download" HorizontalAlignment="Center"
+                VerticalAlignment="Center" Command="{Binding OnDownloadButtonClicked}" />
+        <WrapPanel>
+            <TextBlock Name="CurrentDownloadPercentageTextBlock" Margin="10">0%</TextBlock>
+            <TextBlock Margin="10">of</TextBlock>
+            <TextBlock Name="DownloadSizeTextBlock" Margin="10">0MiB</TextBlock>
+            <TextBlock Name="DownloadAtTextBlock" Margin="10">at</TextBlock>
+            <TextBlock Name="DownloadSpeedTextBlock" Margin="10">0 KiB/s</TextBlock>
+            <TextBlock Name="DownloadEtaTextBlock" Margin="10">ETA</TextBlock>
+            <TextBlock Name="RemainingTimeTextBlock" Margin="10">00:00</TextBlock>
+        </WrapPanel>
+        <ProgressBar Name="CurrentDownloadProgressBar" Value="0" />
+    </StackPanel>
+
+</Window>
