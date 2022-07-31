@@ -41,7 +41,7 @@ public class HttpClientDownloadWithProgress : IDisposable
 
     public async Task StartDownload()
     {
-        _httpClient = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
+        _httpClient = new HttpClient {Timeout = TimeSpan.FromMinutes(5)};
 
         using var response = await _httpClient.GetAsync(_downloadUrl, HttpCompletionOption.ResponseHeadersRead);
         await DownloadFileFromHttpResponseMessage(response);
@@ -110,7 +110,7 @@ public class HttpClientDownloadWithProgress : IDisposable
 
         double? progressPercentage = null;
         if (totalDownloadSize.HasValue)
-            progressPercentage = Math.Round((double)totalBytesRead / totalDownloadSize.Value * 100, 2);
+            progressPercentage = Math.Round((double) totalBytesRead / totalDownloadSize.Value * 100, 2);
 
         ProgressChanged(totalDownloadSize, totalBytesRead, progressPercentage);
     }

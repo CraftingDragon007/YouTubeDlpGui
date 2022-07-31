@@ -1,4 +1,5 @@
 ﻿using System;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
@@ -21,10 +22,26 @@ public class MainWindowViewModel : ViewModelBase
     public void OnDownloadButtonClicked()
     {
         var instance = MainWindow.GetInstance();
+        if (instance.UrlTextBox.Text.Length == 0)
+        {
+            instance.UrlTextBox.Background = new SolidColorBrush(Colors.Red);
+            return;
+        }
+
+        instance.UrlTextBox.Background = new SolidColorBrush(Colors.Black);
+        if (instance.VideoDownloadPathTextBox.Text.Length == 0 ||
+            !Directory.Exists(instance.VideoDownloadPathTextBox.Text))
+        {
+            instance.VideoDownloadPathTextBox.Background = new SolidColorBrush(Colors.Red);
+            return;
+        }
+
+        instance.VideoDownloadPathTextBox.Background = new SolidColorBrush(Colors.Black);
         var thread = new Thread(() =>
         {
             var ytDlPDownloadUrl = GetYtDlpDownloadUrl();
             instance.YtDlPath = GetYtDlpPath();
+            Dispatcher.UIThread.InvokeAsync(() => instance.StatusLabel.Text = "Downloading YT-Dlp...");
             DownloadFile(ytDlPDownloadUrl, instance.YtDlPath);
             if (Environment.OSVersion.Platform.Equals(PlatformID.Unix) ||
                 Environment.OSVersion.Platform.Equals(PlatformID.MacOSX))
@@ -42,10 +59,14 @@ public class MainWindowViewModel : ViewModelBase
                 chmod.Start();
                 chmod.WaitForExit();
             }
+
             var ffmpegDownloadUrl = GetFfmpegDownloadUrl();
-            var path = Path.Combine(Path.GetTempPath(), Environment.OSVersion.Platform.Equals(PlatformID.Unix) ? "ffmpeg.tar.xz" : "ffmpeg.zip");
+            var path = Path.Combine(Path.GetTempPath(),
+                Environment.OSVersion.Platform.Equals(PlatformID.Unix) ? "ffmpeg.tar.xz" : "ffmpeg.zip");
             var ffmpegFolderPath = Path.Combine(Path.GetTempPath(), "ffmpeg");
+            Dispatcher.UIThread.InvokeAsync(() => instance.StatusLabel.Text = "Downloading ffmpeg...");
             DownloadFile(ffmpegDownloadUrl, path);
+            Dispatcher.UIThread.InvokeAsync(() => instance.StatusLabel.Text = "Extracting ffmpeg...");
             Console.WriteLine(path);
             Directory.CreateDirectory(ffmpegFolderPath);
             if (Environment.OSVersion.Platform.Equals(PlatformID.Win32NT) ||
@@ -60,43 +81,56 @@ public class MainWindowViewModel : ViewModelBase
             }
 
             Console.WriteLine(ffmpegFolderPath);
-            var ffmpegPath = Path.Combine(ffmpegFolderPath, Environment.OSVersion.Platform.Equals(PlatformID.Win32NT) ? "ffmpeg.exe" : "ffmpeg");
-            if(!File.Exists(ffmpegPath))
-            {
-                Dispatcher.UIThread.InvokeAsync((() =>
+            var ffmpegPath = Path.Combine(ffmpegFolderPath,
+                Environment.OSVersion.Platform.Equals(PlatformID.Win32NT) ? "ffmpeg.exe" : "ffmpeg");
+            if (!File.Exists(ffmpegPath))
+                Dispatcher.UIThread.InvokeAsync(() =>
                 {
                     instance.DownloadButton.IsEnabled = true;
+                    instance.VideoDownloadPathTextBox.IsEnabled = true;
+                    instance.UrlTextBox.IsEnabled = true;
+                    instance.FinalFormatComboBox.IsEnabled = true;
+                    instance.FormattingMethodComboBox.IsEnabled = true;
+                    instance.VideoDownloadPathButton.IsEnabled = true;
                     instance.ErrorTextBlock.Text = "Failed to download and extract ffmpeg";
-                }));
-            }
+                });
 
-            string? format = "mp4";
-            string formattingMethod = "remux";
+            var format = "mp4";
+            var formattingMethod = "remux";
             Dispatcher.UIThread.InvokeAsync(() =>
             {
-                format = instance.FinalFormatComboBox.SelectedItem == null ? "mp4" : (instance.FinalFormatComboBox.SelectedItem.GetType() == typeof(ComboBoxItem) ? ((ComboBoxItem)instance.FinalFormatComboBox.SelectedItem).Content.ToString() : "mp4");
+                format = instance.FinalFormatComboBox.SelectedItem == null
+                    ? "mp4"
+                    :
+                    instance.FinalFormatComboBox.SelectedItem.GetType() == typeof(ComboBoxItem)
+                        ?
+                        ((ComboBoxItem) instance.FinalFormatComboBox.SelectedItem).Content.ToString()
+                        : "mp4";
                 formattingMethod = instance.FormattingMethodComboBox.SelectedIndex == 0 ? "remux" : "recode";
             }).Wait();
+            FormattingMethod = formattingMethod;
             bool onlyAudio;
             switch (format)
             {
                 case "ogg":
                 case "flac":
                 case "wav":
-                case "aac":    
-                case "mp3" :
+                case "aac":
+                case "mp3":
                     onlyAudio = true;
                     break;
                 default:
                     onlyAudio = false;
                     break;
             }
+
             var process = new Process
             {
                 StartInfo = new ProcessStartInfo
                 {
                     FileName = instance.YtDlPath,
-                    Arguments = $"-f {(onlyAudio ? "" : "bestvideo+")}bestaudio -o {"%(title)s.%(ext)s"} --ffmpeg-location {ffmpegPath} --{formattingMethod}-video {format} {instance.UrlTextBox.Text}",
+                    Arguments =
+                        $"-f {(onlyAudio ? "" : "bestvideo+")}bestaudio -o {"%(title)s.%(ext)s"} --ffmpeg-location {ffmpegPath} --{formattingMethod}-video {format} {instance.UrlTextBox.Text}",
                     UseShellExecute = false,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
@@ -109,13 +143,29 @@ public class MainWindowViewModel : ViewModelBase
             process.Start();
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
+            Dispatcher.UIThread.InvokeAsync(() => { instance.StatusLabel.Text = "Downloading..."; }).Wait();
             process.WaitForExit();
             process.Close();
-            Dispatcher.UIThread.InvokeAsync(() => instance.DownloadButton.IsEnabled = true);
+            Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                instance.DownloadButton.IsEnabled = true;
+                instance.VideoDownloadPathTextBox.IsEnabled = true;
+                instance.UrlTextBox.IsEnabled = true;
+                instance.FinalFormatComboBox.IsEnabled = true;
+                instance.FormattingMethodComboBox.IsEnabled = true;
+                instance.VideoDownloadPathButton.IsEnabled = true;
+                instance.StatusLabel.Text = "Done! Ready to download next video!";
+            });
         });
-        
+
         thread.Start();
+        instance.DownloadButton.Content = "Starting...";
         instance.DownloadButton.IsEnabled = false;
+        instance.VideoDownloadPathTextBox.IsEnabled = false;
+        instance.UrlTextBox.IsEnabled = false;
+        instance.FinalFormatComboBox.IsEnabled = false;
+        instance.FormattingMethodComboBox.IsEnabled = false;
+        instance.VideoDownloadPathButton.IsEnabled = false;
     }
 
     private void ExtractTarArchive(string path, string ffmpegFolderPath)
@@ -159,7 +209,7 @@ public class MainWindowViewModel : ViewModelBase
 
     private void DownloadFile(string url, string path)
     {
-        if(File.Exists(path)) return;
+        if (File.Exists(path)) return;
         var client = new HttpClientDownloadWithProgress(url, path);
         client.ProgressChanged += DownloadFileClient_ProgressChanged;
         client.StartDownload().Wait();
@@ -178,15 +228,16 @@ public class MainWindowViewModel : ViewModelBase
         }
 
         if (text.Contains("[VideoConverter] "))
-        {
             Dispatcher.UIThread.InvokeAsync(() =>
             {
                 // make the progressbar animate
                 instance.CurrentDownloadProgressBar.Value = instance.CurrentDownloadProgressBar.Maximum;
                 instance.CurrentDownloadProgressBar.Value = 0;
                 instance.CurrentDownloadProgressBar.IsIndeterminate = true;
+                instance.StatusLabel.Text = FormattingMethod == "remux"
+                    ? "Remuxing... (This may take a while)"
+                    : "Re-Encoding... This may take a while! Please be patient!";
             });
-        }
         if (!text.Contains('%')) return;
         if (!text.Contains("ETA")) return;
         var percent = text.Split('%')[0].Replace("[download]", "").Replace(" ", "");
@@ -204,6 +255,8 @@ public class MainWindowViewModel : ViewModelBase
             instance.DownloadEtaTextBlock.Text = "ETA";
         });
     }
+
+    public string FormattingMethod { get; set; } = "remux";
 
     private void Process_ErrorDataReceived(object sender, DataReceivedEventArgs e)
     {
@@ -235,8 +288,9 @@ public class MainWindowViewModel : ViewModelBase
             _ => throw new PlatformNotSupportedException("This platform is not supported!")
         };
     }
-    
-    private void DownloadFileClient_ProgressChanged(long? totalfilesize, long totalbytesdownloaded, double? progresspercentage)
+
+    private void DownloadFileClient_ProgressChanged(long? totalfilesize, long totalbytesdownloaded,
+        double? progresspercentage)
     {
         Dispatcher.UIThread.InvokeAsync(() =>
         {
@@ -250,17 +304,17 @@ public class MainWindowViewModel : ViewModelBase
             instance.DownloadSpeedTextBlock.Text = "";
         });
     }
-    
+
     public static string FormatBytes(long size)
     {
         if (size >= 1099511627776)
-            return decimal.Round((decimal)(Math.Round(size / 10995116277.76) * 0.01), 2) + " TiB";
+            return decimal.Round((decimal) (Math.Round(size / 10995116277.76) * 0.01), 2) + " TiB";
         if (size >= 1073741824)
-            return decimal.Round((decimal)(Math.Round(size / 10737418.24) * 0.01), 2) + " GiB";
+            return decimal.Round((decimal) (Math.Round(size / 10737418.24) * 0.01), 2) + " GiB";
         if (size >= 1048576)
-            return decimal.Round((decimal)(Math.Round(size / 10485.76) * 0.01), 2) + " MiB";
+            return decimal.Round((decimal) (Math.Round(size / 10485.76) * 0.01), 2) + " MiB";
         if (size >= 1024)
-            return decimal.Round((decimal)(Math.Round(size / 10.24) * 0.01), 2) + " KiB";
+            return decimal.Round((decimal) (Math.Round(size / 10.24) * 0.01), 2) + " KiB";
         return size + " bytes";
     }
 }

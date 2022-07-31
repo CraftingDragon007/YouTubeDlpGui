@@ -3,11 +3,12 @@
         xmlns:vm="using:YouTubeDlpGui.ViewModels"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="450" d:DesignHeight="450"
+        mc:Ignorable="d" d:DesignWidth="500" d:DesignHeight="450"
         x:Class="YouTubeDlpGui.Views.MainWindow"
         Icon="/Assets/avalonia-logo.ico"
         Title="YouTubeDlpGui"
-        SizeToContent="WidthAndHeight"
+        SizeToContent="Height"
+        Width="500"
         CanResize="False"
         Padding="20"
         TransparencyLevelHint="AcrylicBlur">
@@ -27,7 +28,7 @@
         <TextBlock>YouTube Video URL</TextBlock>
         <TextBox Margin="10" Name="UrlTextBox" Watermark="https://www.youtube.com/watch?v=dQw4w9WgXcQ" />
         <WrapPanel>
-            <TextBox Margin="10" Name="VideoDownloadPathTextBox" MinWidth="300"/>
+            <TextBox Margin="10" Name="VideoDownloadPathTextBox" MinWidth="300" />
             <Button Margin="10" Name="VideoDownloadPathButton" Content="..."
                     Command="{Binding OnVideoDownloadPathButtonClicked}" HorizontalAlignment="Right" />
         </WrapPanel>
@@ -36,7 +37,7 @@
                 <TextBlock>Video</TextBlock>
                 <TextBlock>Format:</TextBlock>
             </StackPanel>
-            <ComboBox Name="FinalFormatComboBox" Margin="10" SelectedIndex="0">
+            <ComboBox Name="FinalFormatComboBox" Margin="10" SelectedIndex="0" MinWidth="90">
                 <ComboBoxItem>mp4</ComboBoxItem>
                 <ComboBoxItem>webm</ComboBoxItem>
                 <ComboBoxItem>mkv</ComboBoxItem>
@@ -60,10 +61,11 @@
                 <ComboBoxItem>Remux</ComboBoxItem>
                 <ComboBoxItem>Re-Encode</ComboBoxItem>
             </ComboBox>
-            
+
         </WrapPanel>
         <Button Margin="10" Name="DownloadButton" IsEnabled="True" Content="Download" HorizontalAlignment="Center"
                 VerticalAlignment="Center" Command="{Binding OnDownloadButtonClicked}" />
+        <TextBlock Name="StatusLabel">Ready</TextBlock>
         <WrapPanel>
             <TextBlock Name="CurrentDownloadPercentageTextBlock" Margin="10">0%</TextBlock>
             <TextBlock Margin="10">of</TextBlock>

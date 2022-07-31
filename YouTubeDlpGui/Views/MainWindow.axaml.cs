@@ -10,7 +10,8 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        VideoDownloadPathTextBox.Watermark = VideoDownloadPathTextBox.Text = Environment.GetFolderPath(Environment.SpecialFolder.MyVideos);
+        VideoDownloadPathTextBox.Watermark = VideoDownloadPathTextBox.Text =
+            Environment.GetFolderPath(Environment.SpecialFolder.MyVideos);
         Closing += MainWindow_Closing;
         Instance = this;
     }
