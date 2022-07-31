@@ -32,10 +32,10 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-          skip_errors: true
+          skip_errors: false
 
-          draft: true
-          prerelease: true
+          draft: false
+          prerelease: false
 
           tag: "build_${{ steps.buildnumber.outputs.build_number }}"
           release_name: "build:${{ steps.commithash.outputs.sha_short }}"
@@ -80,6 +80,6 @@ jobs:
           
           filemap: ${{ matrix.filemap }}
           
-          skip_errors: true
+          skip_errors: false
           
           release_id: ${{ needs.prepare.outputs.RELEASE_ID }}
