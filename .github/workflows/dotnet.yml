@@ -54,15 +54,15 @@ jobs:
           - os: ubuntu-latest
             build: dotnet publish -c release -r linux-x64 -p:PublishSingleFile=true --self-contained true --verbosity Normal -p:PublishTrimmed=True -p:EnableCompressionInSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
             filemap: |
-              YouTubeDlgGui/bin/Release/net6.0/linux-x64/publish/YouTubeDlgGui>YouTubeDlgGui-linux-amd64
+              YouTubeDlpGui/bin/Release/net6.0/linux-x64/publish/YouTubeDlpGui>YouTubeDlpGui-linux-amd64
           - os: windows-latest
             build: dotnet publish -c release -r win-x64 -p:PublishSingleFile=true --self-contained true --verbosity Normal -p:PublishTrimmed=True -p:EnableCompressionInSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
             filemap: |
-              YouTubeDlgGui/bin/Release/net6.0/win-x64/publish/YouTubeDlgGui.exe>YouTubeDlgGui-windows-amd64.exe
+              YouTubeDlpGui/bin/Release/net6.0/win-x64/publish/YouTubeDlpGui.exe>YouTubeDlpGui-windows-amd64.exe
           - os: macos-latest
             build: dotnet publish -c release -r osx-x64 -p:PublishSingleFile=true --self-contained true --verbosity Normal -p:PublishTrimmed=True -p:EnableCompressionInSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
             filemap: |
-              YouTubeDlgGui/bin/Release/net6.0/osx-x64/publish/YouTubeDlgGui>YouTubeDlgGui-macos-amd64
+              YouTubeDlpGui/bin/Release/net6.0/osx-x64/publish/YouTubeDlpGui>YouTubeDlpGui-macos-amd64
     steps:
       - uses: actions/checkout@v2
       - name: Setup .NET
