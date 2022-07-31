@@ -42,7 +42,10 @@ public class MainWindowViewModel : ViewModelBase
             var ytDlPDownloadUrl = GetYtDlpDownloadUrl();
             instance.YtDlPath = GetYtDlpPath();
             Dispatcher.UIThread.InvokeAsync(() => instance.StatusLabel.Text = "Downloading YT-Dlp...");
-            DownloadFile(ytDlPDownloadUrl, instance.YtDlPath);
+            if(Environment.OSVersion.Platform == PlatformID.Win32NT)
+                instance.YtDlPath = DownloadYtDlpWindows(ytDlPDownloadUrl, Path.Combine(Path.GetTempPath(), "yt-dlp.zip"));
+            else
+                DownloadFile(ytDlPDownloadUrl, instance.YtDlPath);
             if (Environment.OSVersion.Platform.Equals(PlatformID.Unix) ||
                 Environment.OSVersion.Platform.Equals(PlatformID.MacOSX))
             {
@@ -72,7 +75,8 @@ public class MainWindowViewModel : ViewModelBase
             if (Environment.OSVersion.Platform.Equals(PlatformID.Win32NT) ||
                 Environment.OSVersion.Platform.Equals(PlatformID.MacOSX))
             {
-                ZipFile.ExtractToDirectory(path, ffmpegFolderPath);
+                ZipFile.ExtractToDirectory(path, ffmpegFolderPath, true);
+                ffmpegFolderPath = Directory.GetDirectories(Directory.GetDirectories(ffmpegFolderPath).First()).First();
             }
             else
             {
@@ -84,6 +88,7 @@ public class MainWindowViewModel : ViewModelBase
             var ffmpegPath = Path.Combine(ffmpegFolderPath,
                 Environment.OSVersion.Platform.Equals(PlatformID.Win32NT) ? "ffmpeg.exe" : "ffmpeg");
             if (!File.Exists(ffmpegPath))
+            {
                 Dispatcher.UIThread.InvokeAsync(() =>
                 {
                     instance.DownloadButton.IsEnabled = true;
@@ -94,6 +99,8 @@ public class MainWindowViewModel : ViewModelBase
                     instance.VideoDownloadPathButton.IsEnabled = true;
                     instance.ErrorTextBlock.Text = "Failed to download and extract ffmpeg";
                 });
+                return;
+            }
 
             var format = "mp4";
             var formattingMethod = "remux";
@@ -159,13 +166,21 @@ public class MainWindowViewModel : ViewModelBase
         });
 
         thread.Start();
-        instance.DownloadButton.Content = "Starting...";
+        instance.StatusLabel.Text = "Starting...";
         instance.DownloadButton.IsEnabled = false;
         instance.VideoDownloadPathTextBox.IsEnabled = false;
         instance.UrlTextBox.IsEnabled = false;
         instance.FinalFormatComboBox.IsEnabled = false;
         instance.FormattingMethodComboBox.IsEnabled = false;
         instance.VideoDownloadPathButton.IsEnabled = false;
+    }
+
+    private string DownloadYtDlpWindows(string ytDlPDownloadUrl, string path)
+    {
+        DownloadFile(ytDlPDownloadUrl, path);
+        var folderPath = Path.Combine(Path.GetTempPath(), "yt-dlp");
+        ZipFile.ExtractToDirectory(path, folderPath, true);
+        return Path.Combine( folderPath, "yt-dlp.exe");
     }
 
     private void ExtractTarArchive(string path, string ffmpegFolderPath)
@@ -191,7 +206,7 @@ public class MainWindowViewModel : ViewModelBase
         {
             PlatformID.Unix => "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux",
             PlatformID.MacOSX => "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos",
-            PlatformID.Win32NT => "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_min.exe",
+            PlatformID.Win32NT => "https://github.com/yt-dlp/yt-dlp/releases/download/2022.07.18/yt-dlp_win.zip",
             _ => throw new PlatformNotSupportedException("This platform is not supported!")
         };
     }
@@ -284,7 +299,7 @@ public class MainWindowViewModel : ViewModelBase
         {
             PlatformID.Unix => "https://johnvansickle.com/ffmpeg/builds/ffmpeg-git-amd64-static.tar.xz",
             PlatformID.MacOSX => "https://ffmpeg.zeranoe.com/builds/macos64/static/ffmpeg-latest-macos64-static.zip",
-            PlatformID.Win32NT => "https://ffmpeg.zeranoe.com/builds/win64/static/ffmpeg-latest-win64-static.zip",
+            PlatformID.Win32NT => "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl-shared.zip",
             _ => throw new PlatformNotSupportedException("This platform is not supported!")
         };
     }
