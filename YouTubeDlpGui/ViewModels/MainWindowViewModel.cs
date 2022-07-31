@@ -2,12 +2,16 @@
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
+using System.Linq;
 using System.Net.Http;
 using System.Text;
 using System.Threading;
 using Avalonia.Controls;
+using Avalonia.Media;
 using Avalonia.Threading;
 using SharpCompress.Archives;
+using SharpCompress.Archives.Tar;
+using SharpCompress.Common;
 using YouTubeDlpGui.Views;
 
 namespace YouTubeDlpGui.ViewModels;
@@ -38,13 +42,61 @@ public class MainWindowViewModel : ViewModelBase
                 chmod.Start();
                 chmod.WaitForExit();
             }
+            var ffmpegDownloadUrl = GetFfmpegDownloadUrl();
+            var path = Path.Combine(Path.GetTempPath(), Environment.OSVersion.Platform.Equals(PlatformID.Unix) ? "ffmpeg.tar.xz" : "ffmpeg.zip");
+            var ffmpegFolderPath = Path.Combine(Path.GetTempPath(), "ffmpeg");
+            DownloadFile(ffmpegDownloadUrl, path);
+            Console.WriteLine(path);
+            Directory.CreateDirectory(ffmpegFolderPath);
+            if (Environment.OSVersion.Platform.Equals(PlatformID.Win32NT) ||
+                Environment.OSVersion.Platform.Equals(PlatformID.MacOSX))
+            {
+                ZipFile.ExtractToDirectory(path, ffmpegFolderPath);
+            }
+            else
+            {
+                ExtractTarArchive(path, ffmpegFolderPath);
+                ffmpegFolderPath = Directory.GetDirectories(ffmpegFolderPath).First();
+            }
 
+            Console.WriteLine(ffmpegFolderPath);
+            var ffmpegPath = Path.Combine(ffmpegFolderPath, Environment.OSVersion.Platform.Equals(PlatformID.Win32NT) ? "ffmpeg.exe" : "ffmpeg");
+            if(!File.Exists(ffmpegPath))
+            {
+                Dispatcher.UIThread.InvokeAsync((() =>
+                {
+                    instance.DownloadButton.IsEnabled = true;
+                    instance.ErrorTextBlock.Text = "Failed to download and extract ffmpeg";
+                }));
+            }
+
+            string? format = "mp4";
+            string formattingMethod = "remux";
+            Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                format = instance.FinalFormatComboBox.SelectedItem == null ? "mp4" : (instance.FinalFormatComboBox.SelectedItem.GetType() == typeof(ComboBoxItem) ? ((ComboBoxItem)instance.FinalFormatComboBox.SelectedItem).Content.ToString() : "mp4");
+                formattingMethod = instance.FormattingMethodComboBox.SelectedIndex == 0 ? "remux" : "recode";
+            }).Wait();
+            bool onlyAudio;
+            switch (format)
+            {
+                case "ogg":
+                case "flac":
+                case "wav":
+                case "aac":    
+                case "mp3" :
+                    onlyAudio = true;
+                    break;
+                default:
+                    onlyAudio = false;
+                    break;
+            }
             var process = new Process
             {
                 StartInfo = new ProcessStartInfo
                 {
                     FileName = instance.YtDlPath,
-                    Arguments = $"-f bestvideo[ext=mp4],bestaudio[ext=m4a] {instance.UrlTextBox.Text}",
+                    Arguments = $"-f {(onlyAudio ? "" : "bestvideo+")}bestaudio -o {"%(title)s.%(ext)s"} --ffmpeg-location {ffmpegPath} --{formattingMethod}-video {format} {instance.UrlTextBox.Text}",
                     UseShellExecute = false,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
@@ -59,25 +111,28 @@ public class MainWindowViewModel : ViewModelBase
             process.BeginErrorReadLine();
             process.WaitForExit();
             process.Close();
-            var ffmpegDownloadUrl = GetFfmpegDownloadUrl();
-            var path = Path.GetTempFileName();
-            var ffmpegFolderPath = Path.Combine(Path.GetTempPath(), "ffmpeg");
-            DownloadFile(ffmpegDownloadUrl, path);
-            Console.WriteLine(path);
-            if (Environment.OSVersion.Platform.Equals(PlatformID.Win32NT) ||
-                Environment.OSVersion.Platform.Equals(PlatformID.MacOSX))
-            {
-                ZipFile.ExtractToDirectory(path, ffmpegFolderPath);
-            }
-            else
-            {
-                SharpCompress.Archives.Tar.TarArchive.Open(path).WriteToDirectory(ffmpegFolderPath);
-            }
-
-            Console.WriteLine(ffmpegFolderPath);
+            Dispatcher.UIThread.InvokeAsync(() => instance.DownloadButton.IsEnabled = true);
         });
+        
         thread.Start();
         instance.DownloadButton.IsEnabled = false;
+    }
+
+    private void ExtractTarArchive(string path, string ffmpegFolderPath)
+    {
+        var process = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = "tar",
+                Arguments = $"-xvf {path} -C {ffmpegFolderPath}",
+                UseShellExecute = false,
+                CreateNoWindow = true
+            }
+        };
+        process.Start();
+        process.WaitForExit();
+        process.Close();
     }
 
     private string GetYtDlpDownloadUrl()
@@ -104,6 +159,7 @@ public class MainWindowViewModel : ViewModelBase
 
     private void DownloadFile(string url, string path)
     {
+        if(File.Exists(path)) return;
         var client = new HttpClientDownloadWithProgress(url, path);
         client.ProgressChanged += DownloadFileClient_ProgressChanged;
         client.StartDownload().Wait();
@@ -118,12 +174,19 @@ public class MainWindowViewModel : ViewModelBase
         if (text.Contains("Destination: "))
         {
             var destination = text[(text.IndexOf("Destination: ", StringComparison.Ordinal) + 14)..];
-            if (instance.VideoName == "")
-                instance.VideoName = destination;
-            else
-                instance.AudioName = destination;
+            instance.VideoName = destination;
         }
 
+        if (text.Contains("[VideoConverter] "))
+        {
+            Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                // make the progressbar animate
+                instance.CurrentDownloadProgressBar.Value = instance.CurrentDownloadProgressBar.Maximum;
+                instance.CurrentDownloadProgressBar.Value = 0;
+                instance.CurrentDownloadProgressBar.IsIndeterminate = true;
+            });
+        }
         if (!text.Contains('%')) return;
         if (!text.Contains("ETA")) return;
         var percent = text.Split('%')[0].Replace("[download]", "").Replace(" ", "");

@@ -33,21 +33,34 @@
         </WrapPanel>
         <WrapPanel>
             <StackPanel Margin="10">
-                <TextBlock>Download</TextBlock>
+                <TextBlock>Video</TextBlock>
                 <TextBlock>Format:</TextBlock>
             </StackPanel>
-            <ComboBox Margin="10" SelectedIndex="0">
-                <ComboBoxItem>webm</ComboBoxItem>
+            <ComboBox Name="FinalFormatComboBox" Margin="10" SelectedIndex="0">
                 <ComboBoxItem>mp4</ComboBoxItem>
+                <ComboBoxItem>webm</ComboBoxItem>
+                <ComboBoxItem>mkv</ComboBoxItem>
+                <ComboBoxItem>flv</ComboBoxItem>
+                <ComboBoxItem>avi</ComboBoxItem>
+                <ComboBoxItem>wmv</ComboBoxItem>
+                <ComboBoxItem>mov</ComboBoxItem>
+                <ComboBoxItem>3gp</ComboBoxItem>
+                <ComboBoxItem>3g2</ComboBoxItem>
+                <ComboBoxItem>mp3</ComboBoxItem>
+                <ComboBoxItem>aac</ComboBoxItem>
+                <ComboBoxItem>wav</ComboBoxItem>
+                <ComboBoxItem>ogg</ComboBoxItem>
+                <ComboBoxItem>flac</ComboBoxItem>
             </ComboBox>
             <StackPanel Margin="10">
-                <TextBlock>Final</TextBlock>
-                <TextBlock>Format:</TextBlock>
+                <TextBlock>Formatting</TextBlock>
+                <TextBlock>Method:</TextBlock>
             </StackPanel>
-            <ComboBox Margin="10" SelectedIndex="0">
-                <ComboBoxItem>mp4</ComboBoxItem>
-                <ComboBoxItem>webm</ComboBoxItem>
+            <ComboBox Name="FormattingMethodComboBox" Margin="10" SelectedIndex="0" MinWidth="125">
+                <ComboBoxItem>Remux</ComboBoxItem>
+                <ComboBoxItem>Re-Encode</ComboBoxItem>
             </ComboBox>
+            
         </WrapPanel>
         <Button Margin="10" Name="DownloadButton" IsEnabled="True" Content="Download" HorizontalAlignment="Center"
                 VerticalAlignment="Center" Command="{Binding OnDownloadButtonClicked}" />
