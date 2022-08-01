@@ -3,6 +3,7 @@
 This is a simple dialog that allows you to download videos from YouTube using [yt-dlp](https://github.com/yt-dlp/yt-dlp).
 # How to run
 Just download the precompiled binary from the release tab.
+**Note:** If you are on Mac Os, you'll need to download the dylib files in the same directory as the executable.
 <br>
 <br>
 Of course you could also build the application using dotnet.

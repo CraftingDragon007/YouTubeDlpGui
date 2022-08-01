@@ -39,7 +39,7 @@ jobs:
 
           tag: "build_${{ steps.buildnumber.outputs.build_number }}"
           release_name: "build:${{ steps.commithash.outputs.sha_short }}"
-          release_body: "This is an automated build"
+          release_body: "This is an automated build\n\nBuild ID: ${{ steps.buildnumber.outputs.build_number }}\n\n **Note**: On Mac Os, you need to download the .dylib files and put them in the same folder as the executable."
 
   buildMatrix:
     name: Publish for ${{ matrix.os }}
@@ -63,6 +63,9 @@ jobs:
             build: dotnet publish -c release -r osx-x64 -p:PublishSingleFile=true --self-contained true --verbosity Normal -p:PublishTrimmed=True -p:EnableCompressionInSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
             filemap: |
               YouTubeDlpGui/bin/Release/net6.0/osx-x64/publish/YouTubeDlpGui>YouTubeDlpGui-macos-amd64
+              YouTubeDlpGui/bin/Release/net6.0/osx-x64/publish/libAvaloniaNative.dylib>libAvaloniaNative.dylib
+              YouTubeDlpGui/bin/Release/net6.0/osx-x64/publish/libHarfBuzzSharp.dylib>libHarfBuzzSharp.dylib
+              YouTubeDlpGui/bin/Release/net6.0/osx-x64/publish/libSkiaSharp.dylib>libSkiaSharp.dylib
     steps:
       - uses: actions/checkout@v2
       - name: Setup .NET
