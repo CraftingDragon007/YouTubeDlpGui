@@ -24,7 +24,7 @@
     </Window.Styles>
 
     <StackPanel>
-        <TextBlock Name="ErrorTextBlock" Classes="red" IsVisible="False" />
+        <TextBlock Name="ErrorTextBlock" Classes="red" IsVisible="False" TextWrapping="WrapWithOverflow" />
         <TextBlock>YouTube Video URL</TextBlock>
         <TextBox Margin="10" Name="UrlTextBox" Watermark="https://www.youtube.com/watch?v=dQw4w9WgXcQ" />
         <WrapPanel>

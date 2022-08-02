@@ -1,18 +1,13 @@
 ﻿using System;
-using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
-using System.Net.Http;
-using System.Text;
+using System.Runtime.InteropServices;
 using System.Threading;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Threading;
-using SharpCompress.Archives;
-using SharpCompress.Archives.Tar;
-using SharpCompress.Common;
 using YouTubeDlpGui.Views;
 
 namespace YouTubeDlpGui.ViewModels;
@@ -42,12 +37,13 @@ public class MainWindowViewModel : ViewModelBase
             var ytDlPDownloadUrl = GetYtDlpDownloadUrl();
             instance.YtDlPath = GetYtDlpPath();
             Dispatcher.UIThread.InvokeAsync(() => instance.StatusLabel.Text = "Downloading YT-Dlp...");
-            if(Environment.OSVersion.Platform == PlatformID.Win32NT)
-                instance.YtDlPath = DownloadYtDlpWindows(ytDlPDownloadUrl, Path.Combine(Path.GetTempPath(), "yt-dlp.zip"));
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                instance.YtDlPath =
+                    DownloadYtDlpWindows(ytDlPDownloadUrl, Path.Combine(Path.GetTempPath(), "yt-dlp.zip"));
             else
                 DownloadFile(ytDlPDownloadUrl, instance.YtDlPath);
-            if (Environment.OSVersion.Platform.Equals(PlatformID.Unix) ||
-                Environment.OSVersion.Platform.Equals(PlatformID.MacOSX))
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux) ||
+                RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
             {
                 var chmod = new Process
                 {
@@ -65,28 +61,31 @@ public class MainWindowViewModel : ViewModelBase
 
             var ffmpegDownloadUrl = GetFfmpegDownloadUrl();
             var path = Path.Combine(Path.GetTempPath(),
-                Environment.OSVersion.Platform.Equals(PlatformID.Unix) ? "ffmpeg.tar.xz" : "ffmpeg.zip");
+                RuntimeInformation.IsOSPlatform(OSPlatform.Linux) ? "ffmpeg.tar.xz" : "ffmpeg.zip");
             var ffmpegFolderPath = Path.Combine(Path.GetTempPath(), "ffmpeg");
             Dispatcher.UIThread.InvokeAsync(() => instance.StatusLabel.Text = "Downloading ffmpeg...");
             DownloadFile(ffmpegDownloadUrl, path);
             Dispatcher.UIThread.InvokeAsync(() => instance.StatusLabel.Text = "Extracting ffmpeg...");
             Console.WriteLine(path);
             Directory.CreateDirectory(ffmpegFolderPath);
-            if (Environment.OSVersion.Platform.Equals(PlatformID.Win32NT) ||
-                Environment.OSVersion.Platform.Equals(PlatformID.MacOSX))
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
                 ZipFile.ExtractToDirectory(path, ffmpegFolderPath, true);
                 ffmpegFolderPath = Directory.GetDirectories(Directory.GetDirectories(ffmpegFolderPath).First()).First();
             }
-            else
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
             {
                 ExtractTarArchive(path, ffmpegFolderPath);
                 ffmpegFolderPath = Directory.GetDirectories(ffmpegFolderPath).First();
             }
 
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+                ZipFile.ExtractToDirectory(path, ffmpegFolderPath, true);
+
             Console.WriteLine(ffmpegFolderPath);
             var ffmpegPath = Path.Combine(ffmpegFolderPath,
-                Environment.OSVersion.Platform.Equals(PlatformID.Win32NT) ? "ffmpeg.exe" : "ffmpeg");
+                RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "ffmpeg.exe" : "ffmpeg");
             if (!File.Exists(ffmpegPath))
             {
                 Dispatcher.UIThread.InvokeAsync(() =>
@@ -108,10 +107,8 @@ public class MainWindowViewModel : ViewModelBase
             {
                 format = instance.FinalFormatComboBox.SelectedItem == null
                     ? "mp4"
-                    :
-                    instance.FinalFormatComboBox.SelectedItem.GetType() == typeof(ComboBoxItem)
-                        ?
-                        ((ComboBoxItem) instance.FinalFormatComboBox.SelectedItem).Content.ToString()
+                    : instance.FinalFormatComboBox.SelectedItem.GetType() == typeof(ComboBoxItem)
+                        ? ((ComboBoxItem) instance.FinalFormatComboBox.SelectedItem).Content.ToString()
                         : "mp4";
                 formattingMethod = instance.FormattingMethodComboBox.SelectedIndex == 0 ? "remux" : "recode";
             }).Wait();
@@ -161,6 +158,9 @@ public class MainWindowViewModel : ViewModelBase
                 instance.FinalFormatComboBox.IsEnabled = true;
                 instance.FormattingMethodComboBox.IsEnabled = true;
                 instance.VideoDownloadPathButton.IsEnabled = true;
+                instance.CurrentDownloadProgressBar.IsIndeterminate = false;
+                instance.ErrorTextBlock.Text = "";
+                instance.UrlTextBox.Text = "";
                 instance.StatusLabel.Text = "Done! Ready to download next video!";
             });
         });
@@ -180,7 +180,7 @@ public class MainWindowViewModel : ViewModelBase
         DownloadFile(ytDlPDownloadUrl, path);
         var folderPath = Path.Combine(Path.GetTempPath(), "yt-dlp");
         ZipFile.ExtractToDirectory(path, folderPath, true);
-        return Path.Combine( folderPath, "yt-dlp.exe");
+        return Path.Combine(folderPath, "yt-dlp.exe");
     }
 
     private void ExtractTarArchive(string path, string ffmpegFolderPath)
@@ -202,24 +202,24 @@ public class MainWindowViewModel : ViewModelBase
 
     private string GetYtDlpDownloadUrl()
     {
-        return Environment.OSVersion.Platform switch
-        {
-            PlatformID.Unix => "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux",
-            PlatformID.MacOSX => "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos",
-            PlatformID.Win32NT => "https://github.com/yt-dlp/yt-dlp/releases/download/2022.07.18/yt-dlp_win.zip",
-            _ => throw new PlatformNotSupportedException("This platform is not supported!")
-        };
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            return "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux";
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            return "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_win.zip";
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            return "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos";
+        throw new PlatformNotSupportedException("This platform is not supported!");
     }
 
     private string GetYtDlpPath()
     {
-        return Environment.OSVersion.Platform switch
-        {
-            PlatformID.Unix => Path.Combine(Path.GetTempPath(), "yt-dlp_linux"),
-            PlatformID.MacOSX => Path.Combine(Path.GetTempPath(), "yt-dlp_macos"),
-            PlatformID.Win32NT => Path.Combine(Path.GetTempPath(), "yt-dlp_win.exe"),
-            _ => throw new PlatformNotSupportedException("This platform is not supported!")
-        };
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            return "yt-dlp_linux";
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            return "yt-dlp_win.exe";
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            return "yt-dlp_macos";
+        throw new PlatformNotSupportedException("This platform is not supported!");
     }
 
     private void DownloadFile(string url, string path)
@@ -242,7 +242,7 @@ public class MainWindowViewModel : ViewModelBase
             instance.VideoName = destination;
         }
 
-        if (text.Contains("[VideoConverter] "))
+        if (text.Contains("[VideoConvertor] ") || text.Contains("[VideoRemuxer] "))
             Dispatcher.UIThread.InvokeAsync(() =>
             {
                 // make the progressbar animate
@@ -278,6 +278,7 @@ public class MainWindowViewModel : ViewModelBase
         var instance = MainWindow.GetInstance();
         var text = e.Data;
         if (text == null) return;
+        if (text.Contains("WARNING: Requested formats are incompatible for merge and will be merged into mkv")) return;
         Dispatcher.UIThread.InvokeAsync(() =>
         {
             instance.ErrorTextBlock.Text = text;
@@ -295,13 +296,14 @@ public class MainWindowViewModel : ViewModelBase
 
     public string GetFfmpegDownloadUrl()
     {
-        return Environment.OSVersion.Platform switch
-        {
-            PlatformID.Unix => "https://johnvansickle.com/ffmpeg/builds/ffmpeg-git-amd64-static.tar.xz",
-            PlatformID.MacOSX => "https://ffmpeg.zeranoe.com/builds/macos64/static/ffmpeg-latest-macos64-static.zip",
-            PlatformID.Win32NT => "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl-shared.zip",
-            _ => throw new PlatformNotSupportedException("This platform is not supported!")
-        };
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            return "https://johnvansickle.com/ffmpeg/builds/ffmpeg-git-amd64-static.tar.xz";
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            return
+                "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl-shared.zip";
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            return "https://evermeet.cx/ffmpeg/getrelease/zip";
+        throw new PlatformNotSupportedException("This platform is not supported!");
     }
 
     private void DownloadFileClient_ProgressChanged(long? totalfilesize, long totalbytesdownloaded,
