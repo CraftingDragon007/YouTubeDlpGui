@@ -33,6 +33,14 @@
             <Button Margin="10" Name="VideoDownloadPathButton" Content="..."
                     Command="{Binding OnVideoDownloadPathButtonClicked}" HorizontalAlignment="Right" />
         </WrapPanel>
+        <WrapPanel Margin="10,0,10,10">
+            <CheckBox Name="UseSystemYtDlpCheckBox" Content="Use system yt-dlp" Margin="0,0,16,0" />
+            <CheckBox Name="UseSystemFfmpegCheckBox" Content="Use system ffmpeg" />
+        </WrapPanel>
+        <WrapPanel Margin="10,0,10,10">
+            <CheckBox Name="RedownloadYtDlpCheckBox" Content="Redownload yt-dlp" Margin="0,0,16,0" />
+            <CheckBox Name="RedownloadFfmpegCheckBox" Content="Redownload ffmpeg" />
+        </WrapPanel>
         <WrapPanel>
             <StackPanel Margin="10">
                 <TextBlock>Video</TextBlock>
@@ -71,7 +79,7 @@
                 <TextBlock>Detailed</TextBlock>
                 <TextBlock>Format:</TextBlock>
             </StackPanel>
-            <TextBox Margin="10" MinWidth="260" IsReadOnly="True" Text="{Binding SelectedDetailedFormatText}" />
+            <TextBox Margin="10" Name="SelectedDetailedFormatTextBox" MinWidth="260" IsReadOnly="True" Text="{Binding SelectedDetailedFormatText}" />
             <Button Margin="10" Name="FormatSelectionButton" Content="Select..." Command="{Binding OnSelectFormatButtonClicked}" />
         </WrapPanel>
         <Button Margin="10" Name="DownloadButton" IsEnabled="True" Content="Download" HorizontalAlignment="Center"
