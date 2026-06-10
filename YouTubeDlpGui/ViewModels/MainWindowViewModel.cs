@@ -162,19 +162,21 @@ public class MainWindowViewModel : ViewModelBase
             processGetFilename.WaitForExit();
 
             bool overwrite = false;
-            if (File.Exists(Path.Combine(downloadPath, fileName)))
+            var existingFilePath = GetExistingOutputFilePath(downloadPath, fileName, format);
+            if (existingFilePath != null)
             {
                 var tcs = new TaskCompletionSource<bool>();
 
                 Dispatcher.UIThread.InvokeAsync(() =>
                 {
                     var dialog = new ConfirmDialogView();
-                    var vm = new ConfirmDialogViewModel("File already exists. Replace?", (result) =>
+                    var vm = new ConfirmDialogViewModel($"{Path.GetFileName(existingFilePath)} already exists. Replace?", (result) =>
                     {
-                        tcs.SetResult(result);
+                        tcs.TrySetResult(result);
                         dialog.Close();
                     });
                     dialog.DataContext = vm;
+                    dialog.Closed += (_, _) => tcs.TrySetResult(false);
                     dialog.ShowDialog(MainWindow.GetInstance());
                 });
 
@@ -193,7 +195,7 @@ public class MainWindowViewModel : ViewModelBase
                     return;
                 }
                 overwrite = true;
-                File.Delete(Path.Combine(downloadPath, fileName));
+                File.Delete(existingFilePath);
             }
             
             FormattingMethod = formattingMethod;
@@ -269,6 +271,17 @@ public class MainWindowViewModel : ViewModelBase
             ZipFile.ExtractToDirectory(path, folderPath, true);
         }
         return exePath;
+    }
+
+    private static string? GetExistingOutputFilePath(string downloadPath, string ytDlpFileName, string format)
+    {
+        var rawFilePath = Path.Combine(downloadPath, ytDlpFileName);
+        if (File.Exists(rawFilePath)) return rawFilePath;
+
+        var finalFilePath = Path.Combine(downloadPath, Path.ChangeExtension(ytDlpFileName, format));
+        if (File.Exists(finalFilePath)) return finalFilePath;
+
+        return null;
     }
 
     private void ExtractTarArchive(string path, string ffmpegFolderPath)
