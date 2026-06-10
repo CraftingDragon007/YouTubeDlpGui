@@ -58,11 +58,21 @@
                 <TextBlock>Formatting</TextBlock>
                 <TextBlock>Method:</TextBlock>
             </StackPanel>
-            <ComboBox Name="FormattingMethodComboBox" Margin="10" SelectedIndex="0" MinWidth="125">
+            <ComboBox Name="FormattingMethodComboBox" Margin="10" SelectedIndex="0" MinWidth="140">
+                <ComboBoxItem>Auto</ComboBoxItem>
                 <ComboBoxItem>Remux</ComboBoxItem>
                 <ComboBoxItem>Re-Encode</ComboBoxItem>
             </ComboBox>
 
+        </WrapPanel>
+        <TextBlock Name="ProcessingInfoTextBlock" Margin="10,0,10,10" Text="Auto will remux when possible and re-encode only when needed." TextWrapping="Wrap" />
+        <WrapPanel>
+            <StackPanel Margin="10">
+                <TextBlock>Detailed</TextBlock>
+                <TextBlock>Format:</TextBlock>
+            </StackPanel>
+            <TextBox Margin="10" MinWidth="260" IsReadOnly="True" Text="{Binding SelectedDetailedFormatText}" />
+            <Button Margin="10" Name="FormatSelectionButton" Content="Select..." Command="{Binding OnSelectFormatButtonClicked}" />
         </WrapPanel>
         <Button Margin="10" Name="DownloadButton" IsEnabled="True" Content="Download" HorizontalAlignment="Center"
                 VerticalAlignment="Center" Command="{Binding OnDownloadButtonClicked}" />

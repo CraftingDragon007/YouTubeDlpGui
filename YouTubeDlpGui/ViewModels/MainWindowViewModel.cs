@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
@@ -10,12 +11,22 @@ using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.Platform.Storage;
+using ReactiveUI;
 using YouTubeDlpGui.Views;
 
 namespace YouTubeDlpGui.ViewModels;
 
 public class MainWindowViewModel : ViewModelBase
 {
+    private string? _customFormatSelector;
+    private string _selectedDetailedFormatText = "Automatic";
+
+    public string SelectedDetailedFormatText
+    {
+        get => _selectedDetailedFormatText;
+        set => this.RaiseAndSetIfChanged(ref _selectedDetailedFormatText, value);
+    }
+
     public void OnDownloadButtonClicked()
     {
         var instance = MainWindow.GetInstance();
@@ -123,13 +134,15 @@ public class MainWindowViewModel : ViewModelBase
                     instance.FinalFormatComboBox.IsEnabled = true;
                     instance.FormattingMethodComboBox.IsEnabled = true;
                     instance.VideoDownloadPathButton.IsEnabled = true;
+                    instance.FormatSelectionButton.IsEnabled = true;
                     instance.ErrorTextBlock.Text = "Failed to download and extract ffmpeg";
                 });
                 return;
             }
 
             var format = "mp4";
-            var formattingMethod = "remux";
+            var formattingMethod = "auto";
+            var customFormatSelector = _customFormatSelector;
             string url = "";
             string downloadPath = "";
             Dispatcher.UIThread.InvokeAsync(() =>
@@ -139,7 +152,12 @@ public class MainWindowViewModel : ViewModelBase
                     : instance.FinalFormatComboBox.SelectedItem.GetType() == typeof(ComboBoxItem)
                         ? ((ComboBoxItem) instance.FinalFormatComboBox.SelectedItem).Content.ToString()
                         : "mp4";
-                formattingMethod = instance.FormattingMethodComboBox.SelectedIndex == 0 ? "remux" : "recode";
+                formattingMethod = instance.FormattingMethodComboBox.SelectedIndex switch
+                {
+                    1 => "remux",
+                    2 => "recode",
+                    _ => "auto"
+                };
                 url = instance.UrlTextBox.Text;
                 downloadPath = instance.VideoDownloadPathTextBox.Text;
             }).Wait();
@@ -149,7 +167,7 @@ public class MainWindowViewModel : ViewModelBase
                 StartInfo = new ProcessStartInfo
                 {
                     FileName = instance.YtDlPath,
-                    Arguments = $"--get-filename -o \"%(title)s.%(ext)s\" {url}",
+                    Arguments = $"--get-filename -o {Quote("%(title)s.%(ext)s")} {Quote(url)}",
                     UseShellExecute = false,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
@@ -161,7 +179,6 @@ public class MainWindowViewModel : ViewModelBase
             var fileName = processGetFilename.StandardOutput.ReadToEnd().Trim();
             processGetFilename.WaitForExit();
 
-            bool overwrite = false;
             var existingFilePath = GetExistingOutputFilePath(downloadPath, fileName, format);
             if (existingFilePath != null)
             {
@@ -190,11 +207,11 @@ public class MainWindowViewModel : ViewModelBase
                         instance.FinalFormatComboBox.IsEnabled = true;
                         instance.FormattingMethodComboBox.IsEnabled = true;
                         instance.VideoDownloadPathButton.IsEnabled = true;
+                        instance.FormatSelectionButton.IsEnabled = true;
                         instance.StatusLabel.Text = "Ready";
                     });
                     return;
                 }
-                overwrite = true;
                 File.Delete(existingFilePath);
             }
             
@@ -214,18 +231,22 @@ public class MainWindowViewModel : ViewModelBase
                     break;
             }
 
+            var formatSelector = GetFormatSelector(onlyAudio, customFormatSelector);
+            var downloadWorkDirectory = Path.Combine(Path.GetTempPath(), "YouTubeDlpGui", Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(downloadWorkDirectory);
+
             var process = new Process
             {
                 StartInfo = new ProcessStartInfo
                 {
                     FileName = instance.YtDlPath,
                     Arguments =
-                        $"-f {(onlyAudio ? "" : "bestvideo+")}bestaudio -o {"%(title)s.%(ext)s"} --ffmpeg-location {ffmpegPath} --{formattingMethod}-video {format} {(overwrite ? "--force-overwrites" : "")} {url}",
+                        $"-f {Quote(formatSelector)} --merge-output-format mkv -o {Quote("%(title)s.%(ext)s")} --ffmpeg-location {Quote(ffmpegPath)} {Quote(url)}",
                     UseShellExecute = false,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     CreateNoWindow = true,
-                    WorkingDirectory = downloadPath
+                    WorkingDirectory = downloadWorkDirectory
                 }
             };
             process.OutputDataReceived += Process_OutputDataReceived;
@@ -236,6 +257,24 @@ public class MainWindowViewModel : ViewModelBase
             Dispatcher.UIThread.InvokeAsync(() => { instance.StatusLabel.Text = "Downloading..."; }).Wait();
             process.WaitForExit();
             process.Close();
+            if (process.ExitCode != 0) throw new InvalidOperationException("Failed to download the selected format.");
+
+            var downloadedFilePath = Path.Combine(downloadWorkDirectory, fileName);
+            if (!File.Exists(downloadedFilePath))
+                downloadedFilePath = Directory.GetFiles(downloadWorkDirectory).OrderByDescending(File.GetLastWriteTime).FirstOrDefault() ?? downloadedFilePath;
+
+            var finalFilePath = Path.Combine(downloadPath, Path.ChangeExtension(fileName, format));
+            RunFfmpegProcessing(ffmpegPath, downloadedFilePath, finalFilePath, format, formattingMethod, onlyAudio);
+
+            try
+            {
+                Directory.Delete(downloadWorkDirectory, true);
+            }
+            catch (Exception)
+            {
+                // Temporary files are best-effort cleanup only.
+            }
+
             Dispatcher.UIThread.InvokeAsync(() =>
             {
                 instance.DownloadButton.IsEnabled = true;
@@ -244,6 +283,7 @@ public class MainWindowViewModel : ViewModelBase
                 instance.FinalFormatComboBox.IsEnabled = true;
                 instance.FormattingMethodComboBox.IsEnabled = true;
                 instance.VideoDownloadPathButton.IsEnabled = true;
+                instance.FormatSelectionButton.IsEnabled = true;
                 instance.CurrentDownloadProgressBar.IsIndeterminate = false;
                 instance.ErrorTextBlock.Text = "";
                 instance.UrlTextBox.Text = "";
@@ -259,6 +299,69 @@ public class MainWindowViewModel : ViewModelBase
         instance.FinalFormatComboBox.IsEnabled = false;
         instance.FormattingMethodComboBox.IsEnabled = false;
         instance.VideoDownloadPathButton.IsEnabled = false;
+        instance.FormatSelectionButton.IsEnabled = false;
+    }
+
+    public async void OnSelectFormatButtonClicked()
+    {
+        var instance = MainWindow.GetInstance();
+        if (instance.UrlTextBox.Text.Length == 0)
+        {
+            instance.UrlTextBox.Background = new SolidColorBrush(Colors.Red);
+            return;
+        }
+
+        instance.UrlTextBox.Background = new SolidColorBrush(Colors.Black);
+        instance.StatusLabel.Text = "Loading formats...";
+
+        try
+        {
+            instance.YtDlPath = GetYtDlpPath();
+            if (!File.Exists(instance.YtDlPath))
+            {
+                var ytDlPDownloadUrl = GetYtDlpDownloadUrl();
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                    instance.YtDlPath = DownloadYtDlpWindows(ytDlPDownloadUrl, Path.Combine(Path.GetTempPath(), "yt-dlp.zip"));
+                else
+                    DownloadFile(ytDlPDownloadUrl, instance.YtDlPath);
+            }
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux) ||
+                RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            {
+                var chmod = new Process
+                {
+                    StartInfo = new ProcessStartInfo
+                    {
+                        FileName = "chmod",
+                        Arguments = "755 " + instance.YtDlPath,
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    }
+                };
+                chmod.Start();
+                chmod.WaitForExit();
+            }
+
+            var formats = GetFormats(instance.YtDlPath, instance.UrlTextBox.Text);
+            var dialogViewModel = new FormatSelectionDialogViewModel(formats, _customFormatSelector);
+            var dialog = new FormatSelectionDialogView(dialogViewModel);
+            var selectedFormat = await dialog.ShowDialog<string?>(instance);
+
+            if (selectedFormat != null)
+            {
+                _customFormatSelector = selectedFormat.Length == 0 ? null : selectedFormat;
+                SelectedDetailedFormatText = _customFormatSelector ?? "Automatic";
+            }
+
+            instance.StatusLabel.Text = "Ready";
+        }
+        catch (Exception ex)
+        {
+            instance.ErrorTextBlock.Text = ex.Message;
+            instance.ErrorTextBlock.IsVisible = true;
+            instance.StatusLabel.Text = "Ready";
+        }
     }
 
     private string DownloadYtDlpWindows(string ytDlPDownloadUrl, string path)
@@ -282,6 +385,200 @@ public class MainWindowViewModel : ViewModelBase
         if (File.Exists(finalFilePath)) return finalFilePath;
 
         return null;
+    }
+
+    private static string GetFormatSelector(bool onlyAudio, string? customFormatSelector)
+    {
+        return string.IsNullOrWhiteSpace(customFormatSelector)
+            ? (onlyAudio ? "bestaudio" : "bestvideo+bestaudio")
+            : customFormatSelector.Trim();
+    }
+
+    private static ObservableCollection<YtDlpFormatOption> GetFormats(string ytDlpPath, string url)
+    {
+        var process = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = ytDlpPath,
+                Arguments = $"-F {Quote(url)}",
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true
+            }
+        };
+
+        process.Start();
+        var output = process.StandardOutput.ReadToEnd();
+        var error = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+
+        if (process.ExitCode != 0) throw new InvalidOperationException(error.Trim());
+
+        var formats = new ObservableCollection<YtDlpFormatOption>();
+        foreach (var line in output.Split(Environment.NewLine))
+        {
+            var trimmed = line.Trim();
+            if (trimmed.Length == 0 || trimmed.StartsWith("[")) continue;
+            if (trimmed.StartsWith("ID ") || trimmed.StartsWith("---")) continue;
+
+            var formatId = trimmed.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+            if (string.IsNullOrWhiteSpace(formatId)) continue;
+
+            formats.Add(new YtDlpFormatOption(formatId, trimmed));
+        }
+
+        return formats;
+    }
+
+    private void RunFfmpegProcessing(string ffmpegPath, string inputPath, string outputPath, string targetContainer,
+        string formattingMethod, bool onlyAudio)
+    {
+        if (!File.Exists(inputPath)) throw new FileNotFoundException("Downloaded file was not found.", inputPath);
+
+        if (formattingMethod == "recode")
+        {
+            RunFfmpeg(ffmpegPath, GetReencodeArguments(inputPath, outputPath, targetContainer, onlyAudio),
+                "Re-Encoding... This may take a while! Please be patient!", false);
+            SetProcessingInfo($"Re-encoded to .{targetContainer} because re-encoding was selected.");
+            return;
+        }
+
+        var remuxSucceeded = RunFfmpeg(ffmpegPath, GetRemuxArguments(inputPath, outputPath, onlyAudio),
+            "Remuxing... (This may take a while)", formattingMethod == "auto");
+        if (remuxSucceeded)
+        {
+            SetProcessingInfo($"Remuxed to .{targetContainer}; the downloaded codecs were accepted by the target container.");
+            return;
+        }
+
+        if (File.Exists(outputPath)) File.Delete(outputPath);
+        RunFfmpeg(ffmpegPath, GetReencodeArguments(inputPath, outputPath, targetContainer, onlyAudio),
+            "Re-Encoding... The target container needs compatible codecs.", false);
+        SetProcessingInfo($"Re-encoded to .{targetContainer}; direct remuxing was not compatible with the target container.");
+    }
+
+    private bool RunFfmpeg(string ffmpegPath, string arguments, string statusText, bool allowFailure)
+    {
+        var instance = MainWindow.GetInstance();
+        TimeSpan? duration = null;
+        Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            instance.StatusLabel.Text = statusText;
+            instance.CurrentDownloadProgressBar.IsIndeterminate = false;
+            instance.CurrentDownloadProgressBar.Value = 0;
+            instance.CurrentDownloadPercentageTextBlock.Text = "0%";
+        }).Wait();
+
+        var process = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = ffmpegPath,
+                Arguments = arguments,
+                UseShellExecute = false,
+                RedirectStandardError = true,
+                CreateNoWindow = true
+            }
+        };
+
+        process.Start();
+        while (!process.StandardError.EndOfStream)
+        {
+            var line = process.StandardError.ReadLine();
+            if (line == null) continue;
+
+            duration ??= TryReadDuration(line);
+            var current = TryReadProgressTime(line);
+            if (duration == null || current == null || duration.Value.TotalSeconds <= 0) continue;
+
+            var percent = Math.Min(100, current.Value.TotalSeconds / duration.Value.TotalSeconds * 100);
+            Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                instance.CurrentDownloadProgressBar.Value = percent;
+                instance.CurrentDownloadPercentageTextBlock.Text = Math.Round(percent, 1) + "%";
+            });
+        }
+
+        process.WaitForExit();
+        if (process.ExitCode == 0)
+        {
+            Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                instance.CurrentDownloadProgressBar.Value = 100;
+                instance.CurrentDownloadPercentageTextBlock.Text = "100%";
+            }).Wait();
+            return true;
+        }
+
+        if (allowFailure) return false;
+        throw new InvalidOperationException("ffmpeg failed to process the selected format.");
+    }
+
+    private static string GetRemuxArguments(string inputPath, string outputPath, bool onlyAudio)
+    {
+        return $"-y -i {Quote(inputPath)} {(onlyAudio ? "-vn " : "")}-c copy {Quote(outputPath)}";
+    }
+
+    private static string GetReencodeArguments(string inputPath, string outputPath, string targetContainer, bool onlyAudio)
+    {
+        var audioCodec = targetContainer switch
+        {
+            "mp3" => "libmp3lame",
+            "flac" => "flac",
+            "wav" => "pcm_s16le",
+            "ogg" => "libvorbis",
+            "webm" => "libopus",
+            _ => "aac"
+        };
+
+        if (onlyAudio) return $"-y -i {Quote(inputPath)} -vn -c:a {audioCodec} {Quote(outputPath)}";
+
+        var videoCodec = targetContainer switch
+        {
+            "webm" => "libvpx-vp9",
+            "flv" => "flv",
+            "avi" => "mpeg4",
+            _ => "libx264"
+        };
+
+        return $"-y -i {Quote(inputPath)} -c:v {videoCodec} -c:a {audioCodec} {Quote(outputPath)}";
+    }
+
+    private void SetProcessingInfo(string text)
+    {
+        Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            var instance = MainWindow.GetInstance();
+            instance.ProcessingInfoTextBlock.Text = text;
+        });
+    }
+
+    private static TimeSpan? TryReadDuration(string line)
+    {
+        var durationIndex = line.IndexOf("Duration: ", StringComparison.Ordinal);
+        if (durationIndex < 0) return null;
+
+        var value = line.Substring(durationIndex + 10, 11);
+        return TimeSpan.TryParse(value, out var duration) ? duration : null;
+    }
+
+    private static TimeSpan? TryReadProgressTime(string line)
+    {
+        var timeIndex = line.IndexOf("time=", StringComparison.Ordinal);
+        if (timeIndex < 0) return null;
+
+        var value = line[(timeIndex + 5)..].TrimStart();
+        var endIndex = value.IndexOf(' ');
+        if (endIndex >= 0) value = value[..endIndex];
+
+        return TimeSpan.TryParse(value, out var time) ? time : null;
+    }
+
+    private static string Quote(string value)
+    {
+        return "\"" + value.Replace("\"", "\\\"") + "\"";
     }
 
     private void ExtractTarArchive(string path, string ffmpegFolderPath)
