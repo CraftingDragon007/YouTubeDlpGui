@@ -10,7 +10,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        VideoDownloadPathTextBox.Watermark = VideoDownloadPathTextBox.Text =
+        VideoDownloadPathTextBox.PlaceholderText = VideoDownloadPathTextBox.Text =
             Environment.GetFolderPath(Environment.SpecialFolder.MyVideos);
         Closing += MainWindow_Closing;
         Instance = this;
@@ -23,14 +23,6 @@ public partial class MainWindow : Window
 
     private void MainWindow_Closing(object? sender, CancelEventArgs e)
     {
-        try
-        {
-            File.Delete(YtDlPath);
-        }
-        catch (Exception)
-        {
-            //ignored
-        }
     }
 
     public static MainWindow GetInstance()

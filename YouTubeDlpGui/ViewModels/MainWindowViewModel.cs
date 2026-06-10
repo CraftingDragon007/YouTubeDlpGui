@@ -5,9 +5,11 @@ using System.IO.Compression;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
+using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Threading;
+using Avalonia.Platform.Storage;
 using YouTubeDlpGui.Views;
 
 namespace YouTubeDlpGui.ViewModels;
@@ -36,12 +38,15 @@ public class MainWindowViewModel : ViewModelBase
         {
             var ytDlPDownloadUrl = GetYtDlpDownloadUrl();
             instance.YtDlPath = GetYtDlpPath();
-            Dispatcher.UIThread.InvokeAsync(() => instance.StatusLabel.Text = "Downloading YT-Dlp...");
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-                instance.YtDlPath =
-                    DownloadYtDlpWindows(ytDlPDownloadUrl, Path.Combine(Path.GetTempPath(), "yt-dlp.zip"));
-            else
-                DownloadFile(ytDlPDownloadUrl, instance.YtDlPath);
+            if (!File.Exists(instance.YtDlPath))
+            {
+                Dispatcher.UIThread.InvokeAsync(() => instance.StatusLabel.Text = "Downloading YT-Dlp...");
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                    instance.YtDlPath =
+                        DownloadYtDlpWindows(ytDlPDownloadUrl, Path.Combine(Path.GetTempPath(), "yt-dlp.zip"));
+                else
+                    DownloadFile(ytDlPDownloadUrl, instance.YtDlPath);
+            }
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux) ||
                 RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
             {
@@ -63,29 +68,51 @@ public class MainWindowViewModel : ViewModelBase
             var path = Path.Combine(Path.GetTempPath(),
                 RuntimeInformation.IsOSPlatform(OSPlatform.Linux) ? "ffmpeg.tar.xz" : "ffmpeg.zip");
             var ffmpegFolderPath = Path.Combine(Path.GetTempPath(), "ffmpeg");
-            Dispatcher.UIThread.InvokeAsync(() => instance.StatusLabel.Text = "Downloading ffmpeg...");
-            DownloadFile(ffmpegDownloadUrl, path);
-            Dispatcher.UIThread.InvokeAsync(() => instance.StatusLabel.Text = "Extracting ffmpeg...");
-            Console.WriteLine(path);
-            Directory.CreateDirectory(ffmpegFolderPath);
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            var ffmpegExeName = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "ffmpeg.exe" : "ffmpeg";
+            string ffmpegPath = "";
+
+            bool needsDownload = true;
+            if (Directory.Exists(ffmpegFolderPath))
             {
-                ZipFile.ExtractToDirectory(path, ffmpegFolderPath, true);
-                ffmpegFolderPath = Directory.GetDirectories(Directory.GetDirectories(ffmpegFolderPath).First()).First();
+                var subDirs = Directory.GetDirectories(ffmpegFolderPath);
+                if (subDirs.Length > 0)
+                {
+                    // Assuming the first subdirectory contains the binary
+                    string potentialFfmpegPath = Path.Combine(subDirs.First(), ffmpegExeName);
+                    if (File.Exists(potentialFfmpegPath))
+                    {
+                        ffmpegPath = potentialFfmpegPath;
+                        needsDownload = false;
+                    }
+                }
             }
 
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            if (needsDownload)
             {
-                ExtractTarArchive(path, ffmpegFolderPath);
-                ffmpegFolderPath = Directory.GetDirectories(ffmpegFolderPath).First();
+                Dispatcher.UIThread.InvokeAsync(() => instance.StatusLabel.Text = "Downloading ffmpeg...");
+                DownloadFile(ffmpegDownloadUrl, path);
+                Dispatcher.UIThread.InvokeAsync(() => instance.StatusLabel.Text = "Extracting ffmpeg...");
+                Console.WriteLine(path);
+                Directory.CreateDirectory(ffmpegFolderPath);
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                {
+                    ZipFile.ExtractToDirectory(path, ffmpegFolderPath, true);
+                    ffmpegFolderPath = Directory.GetDirectories(Directory.GetDirectories(ffmpegFolderPath).First()).First();
+                }
+
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+                {
+                    ExtractTarArchive(path, ffmpegFolderPath);
+                    ffmpegFolderPath = Directory.GetDirectories(ffmpegFolderPath).First();
+                }
+
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+                    ZipFile.ExtractToDirectory(path, ffmpegFolderPath, true);
+
+                Console.WriteLine(ffmpegFolderPath);
+                ffmpegPath = Path.Combine(ffmpegFolderPath, ffmpegExeName);
             }
-
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-                ZipFile.ExtractToDirectory(path, ffmpegFolderPath, true);
-
-            Console.WriteLine(ffmpegFolderPath);
-            var ffmpegPath = Path.Combine(ffmpegFolderPath,
-                RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "ffmpeg.exe" : "ffmpeg");
+            
             if (!File.Exists(ffmpegPath))
             {
                 Dispatcher.UIThread.InvokeAsync(() =>
@@ -103,6 +130,8 @@ public class MainWindowViewModel : ViewModelBase
 
             var format = "mp4";
             var formattingMethod = "remux";
+            string url = "";
+            string downloadPath = "";
             Dispatcher.UIThread.InvokeAsync(() =>
             {
                 format = instance.FinalFormatComboBox.SelectedItem == null
@@ -111,7 +140,62 @@ public class MainWindowViewModel : ViewModelBase
                         ? ((ComboBoxItem) instance.FinalFormatComboBox.SelectedItem).Content.ToString()
                         : "mp4";
                 formattingMethod = instance.FormattingMethodComboBox.SelectedIndex == 0 ? "remux" : "recode";
+                url = instance.UrlTextBox.Text;
+                downloadPath = instance.VideoDownloadPathTextBox.Text;
             }).Wait();
+
+            var processGetFilename = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = instance.YtDlPath,
+                    Arguments = $"--get-filename -o \"%(title)s.%(ext)s\" {url}",
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true,
+                    WorkingDirectory = downloadPath
+                }
+            };
+            processGetFilename.Start();
+            var fileName = processGetFilename.StandardOutput.ReadToEnd().Trim();
+            processGetFilename.WaitForExit();
+
+            bool overwrite = false;
+            if (File.Exists(Path.Combine(downloadPath, fileName)))
+            {
+                var tcs = new TaskCompletionSource<bool>();
+
+                Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    var dialog = new ConfirmDialogView();
+                    var vm = new ConfirmDialogViewModel("File already exists. Replace?", (result) =>
+                    {
+                        tcs.SetResult(result);
+                        dialog.Close();
+                    });
+                    dialog.DataContext = vm;
+                    dialog.ShowDialog(MainWindow.GetInstance());
+                });
+
+                if (!tcs.Task.Result)
+                {
+                    Dispatcher.UIThread.InvokeAsync(() =>
+                    {
+                        instance.DownloadButton.IsEnabled = true;
+                        instance.VideoDownloadPathTextBox.IsEnabled = true;
+                        instance.UrlTextBox.IsEnabled = true;
+                        instance.FinalFormatComboBox.IsEnabled = true;
+                        instance.FormattingMethodComboBox.IsEnabled = true;
+                        instance.VideoDownloadPathButton.IsEnabled = true;
+                        instance.StatusLabel.Text = "Ready";
+                    });
+                    return;
+                }
+                overwrite = true;
+                File.Delete(Path.Combine(downloadPath, fileName));
+            }
+            
             FormattingMethod = formattingMethod;
             bool onlyAudio;
             switch (format)
@@ -134,12 +218,12 @@ public class MainWindowViewModel : ViewModelBase
                 {
                     FileName = instance.YtDlPath,
                     Arguments =
-                        $"-f {(onlyAudio ? "" : "bestvideo+")}bestaudio -o {"%(title)s.%(ext)s"} --ffmpeg-location {ffmpegPath} --{formattingMethod}-video {format} {instance.UrlTextBox.Text}",
+                        $"-f {(onlyAudio ? "" : "bestvideo+")}bestaudio -o {"%(title)s.%(ext)s"} --ffmpeg-location {ffmpegPath} --{formattingMethod}-video {format} {(overwrite ? "--force-overwrites" : "")} {url}",
                     UseShellExecute = false,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     CreateNoWindow = true,
-                    WorkingDirectory = instance.VideoDownloadPathTextBox.Text
+                    WorkingDirectory = downloadPath
                 }
             };
             process.OutputDataReceived += Process_OutputDataReceived;
@@ -179,8 +263,12 @@ public class MainWindowViewModel : ViewModelBase
     {
         DownloadFile(ytDlPDownloadUrl, path);
         var folderPath = Path.Combine(Path.GetTempPath(), "yt-dlp");
-        ZipFile.ExtractToDirectory(path, folderPath, true);
-        return Path.Combine(folderPath, "yt-dlp.exe");
+        var exePath = Path.Combine(folderPath, "yt-dlp.exe");
+        if (!File.Exists(exePath))
+        {
+            ZipFile.ExtractToDirectory(path, folderPath, true);
+        }
+        return exePath;
     }
 
     private void ExtractTarArchive(string path, string ffmpegFolderPath)
@@ -213,13 +301,16 @@ public class MainWindowViewModel : ViewModelBase
 
     private string GetYtDlpPath()
     {
+        string fileName;
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-            return "yt-dlp_linux";
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            return "yt-dlp_win.exe";
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-            return "yt-dlp_macos";
-        throw new PlatformNotSupportedException("This platform is not supported!");
+            fileName = "yt-dlp_linux";
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            fileName = "yt-dlp_win.exe";
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            fileName = "yt-dlp_macos";
+        else
+            throw new PlatformNotSupportedException("This platform is not supported!");
+        return Path.Combine(Path.GetTempPath(), fileName);
     }
 
     private void DownloadFile(string url, string path)
@@ -289,9 +380,14 @@ public class MainWindowViewModel : ViewModelBase
     public async void OnVideoDownloadPathButtonClicked()
     {
         var instance = MainWindow.GetInstance();
-        var dialog = new OpenFolderDialog();
-        var result = await dialog.ShowAsync(instance);
-        if (result != null) instance.VideoDownloadPathTextBox.Text = result;
+        var folderPicker = await instance.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+        {
+            AllowMultiple = false,
+            Title = "Select download folder"
+        });
+
+        if (folderPicker.Count >= 1)
+            instance.VideoDownloadPathTextBox.Text = folderPicker[0].Path.LocalPath;
     }
 
     public string GetFfmpegDownloadUrl()
