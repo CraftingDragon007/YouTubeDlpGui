@@ -3,38 +3,96 @@
         xmlns:vm="using:YouTubeDlpGui.ViewModels"
         x:Class="YouTubeDlpGui.Views.FormatSelectionDialogView"
         x:DataType="vm:FormatSelectionDialogViewModel"
-        Title="Select yt-dlp Format"
-        Width="900"
-        Height="600"
-        MinWidth="700"
-        MinHeight="450"
+        Title="Select Download Format"
+        Width="980"
+        Height="700"
+        MinWidth="760"
+        MinHeight="560"
         Padding="20">
     <DockPanel>
-        <StackPanel DockPanel.Dock="Top" Margin="0,0,0,12">
-            <TextBlock Text="Available formats" FontSize="18" FontWeight="Bold" />
-            <TextBlock Text="Select a row to use its format id, or type any yt-dlp -f selector such as bestvideo+bestaudio, 137+140, or best[height&lt;=1080]." TextWrapping="Wrap" />
+        <StackPanel DockPanel.Dock="Top" Margin="0,0,0,16">
+            <TextBlock Text="Detailed format selection" FontSize="20" FontWeight="Bold" />
+            <TextBlock Text="Choose a preset, a combined format, or pair one video stream with one audio stream. The generated yt-dlp selector is shown at the bottom for transparency." TextWrapping="Wrap" />
         </StackPanel>
 
-        <StackPanel DockPanel.Dock="Bottom" Margin="0,12,0,0">
-            <TextBlock Text="Format selector passed to -f" />
+        <StackPanel DockPanel.Dock="Bottom" Margin="0,16,0,0">
+            <TextBlock Text="Current selection" FontWeight="Bold" />
+            <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" Margin="0,2,0,8" />
+            <TextBlock Text="yt-dlp selector" />
             <TextBox Text="{Binding FormatSelector}" Margin="0,4,0,12" />
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                <Button Content="Use Format" Command="{Binding UseFormatCommand}" Margin="0,0,10,0" />
-                <Button Content="Clear Custom Format" Command="{Binding ClearCommand}" Margin="0,0,10,0" />
+                <Button Content="Use Selection" Command="{Binding UseSelectionCommand}" Margin="0,0,10,0" />
+                <Button Content="Automatic" Command="{Binding ClearCommand}" Margin="0,0,10,0" />
                 <Button Content="Cancel" Command="{Binding CancelCommand}" />
             </StackPanel>
         </StackPanel>
 
-        <Border BorderBrush="Gray" BorderThickness="1">
-            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
-                <ListBox ItemsSource="{Binding Formats}" SelectedItem="{Binding SelectedFormat}">
-                    <ListBox.ItemTemplate>
-                        <DataTemplate x:DataType="vm:YtDlpFormatOption">
-                            <TextBlock Text="{Binding Details}" FontFamily="Consolas, Menlo, monospace" TextWrapping="NoWrap" />
-                        </DataTemplate>
-                    </ListBox.ItemTemplate>
-                </ListBox>
-            </ScrollViewer>
-        </Border>
+        <Grid RowDefinitions="Auto,*" ColumnDefinitions="*">
+            <WrapPanel Grid.Row="0" Margin="0,0,0,14">
+                <Button Content="Best quality" Command="{Binding BestQualityCommand}" Margin="0,0,8,8" />
+                <Button Content="Best compatible" Command="{Binding BestCompatibleCommand}" Margin="0,0,8,8" />
+                <Button Content="1080p max" Command="{Binding Max1080Command}" Margin="0,0,8,8" />
+                <Button Content="Best audio" Command="{Binding BestAudioCommand}" Margin="0,0,8,8" />
+            </WrapPanel>
+
+            <TabControl Grid.Row="1">
+                <TabItem Header="Video + Audio">
+                    <Grid ColumnDefinitions="*,*" Margin="0,12,0,0">
+                        <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                            <DockPanel Margin="0,0,0,6">
+                                <Button DockPanel.Dock="Right" Content="Clear" Command="{Binding ClearVideoCommand}" />
+                                <TextBlock Text="Video stream" FontWeight="Bold" VerticalAlignment="Center" />
+                            </DockPanel>
+                            <ListBox Name="VideoFormatsListBox" ItemsSource="{Binding VideoFormats}" SelectedItem="{Binding SelectedVideoFormat}" PointerPressed="VideoFormatsListBox_OnPointerPressed">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:YtDlpFormatOption">
+                                        <StackPanel Margin="4">
+                                            <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" />
+                                            <TextBlock Text="{Binding DetailLine}" FontSize="12" Opacity="0.75" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1" Margin="8,0,0,0">
+                            <DockPanel Margin="0,0,0,6">
+                                <Button DockPanel.Dock="Right" Content="Clear" Command="{Binding ClearAudioCommand}" />
+                                <TextBlock Text="Audio stream" FontWeight="Bold" VerticalAlignment="Center" />
+                            </DockPanel>
+                            <ListBox Name="AudioFormatsListBox" ItemsSource="{Binding AudioFormats}" SelectedItem="{Binding SelectedAudioFormat}" PointerPressed="AudioFormatsListBox_OnPointerPressed">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:YtDlpFormatOption">
+                                        <StackPanel Margin="4">
+                                            <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" />
+                                            <TextBlock Text="{Binding DetailLine}" FontSize="12" Opacity="0.75" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </StackPanel>
+                    </Grid>
+                </TabItem>
+
+                <TabItem Header="Combined">
+                    <StackPanel Margin="0,12,0,0">
+                        <DockPanel Margin="0,0,0,8">
+                            <Button DockPanel.Dock="Right" Content="Clear" Command="{Binding ClearCombinedCommand}" />
+                            <TextBlock Text="Combined formats already contain video and audio. They are usually lower quality but do not need merging." TextWrapping="Wrap" />
+                        </DockPanel>
+                        <ListBox Name="CombinedFormatsListBox" ItemsSource="{Binding CombinedFormats}" SelectedItem="{Binding SelectedCombinedFormat}" PointerPressed="CombinedFormatsListBox_OnPointerPressed">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="vm:YtDlpFormatOption">
+                                    <StackPanel Margin="4">
+                                        <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" />
+                                        <TextBlock Text="{Binding DetailLine}" FontSize="12" Opacity="0.75" TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </StackPanel>
+                </TabItem>
+            </TabControl>
+        </Grid>
     </DockPanel>
 </Window>

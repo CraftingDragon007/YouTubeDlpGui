@@ -78,6 +78,8 @@ public partial class MainWindow : Window
         RedownloadFfmpegCheckBox.IsChecked = preferences.RedownloadFfmpeg;
         FinalFormatComboBox.SelectedIndex = preferences.FinalFormatIndex;
         FormattingMethodComboBox.SelectedIndex = preferences.FormattingMethodIndex;
+        VideoEncodingComboBox.SelectedIndex = preferences.VideoEncodingIndex;
+        AudioEncodingComboBox.SelectedIndex = preferences.AudioEncodingIndex;
     }
 
     private void SavePreferences()
@@ -90,7 +92,9 @@ public partial class MainWindow : Window
             RedownloadYtDlp = RedownloadYtDlpCheckBox.IsChecked == true,
             RedownloadFfmpeg = RedownloadFfmpegCheckBox.IsChecked == true,
             FinalFormatIndex = FinalFormatComboBox.SelectedIndex,
-            FormattingMethodIndex = FormattingMethodComboBox.SelectedIndex
+            FormattingMethodIndex = FormattingMethodComboBox.SelectedIndex,
+            VideoEncodingIndex = VideoEncodingComboBox.SelectedIndex,
+            AudioEncodingIndex = AudioEncodingComboBox.SelectedIndex
         };
         preferences.Save();
     }
@@ -105,6 +109,8 @@ public class AppPreferences
     public bool RedownloadFfmpeg { get; set; }
     public int FinalFormatIndex { get; set; }
     public int FormattingMethodIndex { get; set; }
+    public int VideoEncodingIndex { get; set; }
+    public int AudioEncodingIndex { get; set; }
 
     private static string FilePath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),

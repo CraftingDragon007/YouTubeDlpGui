@@ -1,10 +1,14 @@
 ﻿using System;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Text;
+using System.Text.RegularExpressions;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Controls;
@@ -51,6 +55,8 @@ public class MainWindowViewModel : ViewModelBase
         var redownloadFfmpeg = instance.RedownloadFfmpegCheckBox.IsChecked == true;
         var thread = new Thread(() =>
         {
+            try
+            {
             instance.YtDlPath = EnsureYtDlpPath(instance, useSystemYtDlp, redownloadYtDlp);
             var ffmpegPath = EnsureFfmpegPath(instance, useSystemFfmpeg, redownloadFfmpeg);
             
@@ -63,6 +69,8 @@ public class MainWindowViewModel : ViewModelBase
                     instance.UrlTextBox.IsEnabled = true;
                     instance.FinalFormatComboBox.IsEnabled = true;
                     instance.FormattingMethodComboBox.IsEnabled = true;
+                    instance.VideoEncodingComboBox.IsEnabled = true;
+                    instance.AudioEncodingComboBox.IsEnabled = true;
                     instance.VideoDownloadPathButton.IsEnabled = true;
                     instance.SelectedDetailedFormatTextBox.IsEnabled = true;
                     instance.FormatSelectionButton.IsEnabled = true;
@@ -75,6 +83,8 @@ public class MainWindowViewModel : ViewModelBase
             var format = "mp4";
             var formattingMethod = "auto";
             var customFormatSelector = _customFormatSelector;
+            string videoEncoding = "Auto";
+            string audioEncoding = "Auto";
             string url = "";
             string downloadPath = "";
             Dispatcher.UIThread.InvokeAsync(() =>
@@ -90,6 +100,8 @@ public class MainWindowViewModel : ViewModelBase
                     2 => "recode",
                     _ => "auto"
                 };
+                videoEncoding = GetSelectedComboBoxText(instance.VideoEncodingComboBox, "Auto");
+                audioEncoding = GetSelectedComboBoxText(instance.AudioEncodingComboBox, "Auto");
                 url = instance.UrlTextBox.Text ?? "";
                 downloadPath = instance.VideoDownloadPathTextBox.Text ?? "";
             }).Wait();
@@ -138,6 +150,8 @@ public class MainWindowViewModel : ViewModelBase
                         instance.UrlTextBox.IsEnabled = true;
                         instance.FinalFormatComboBox.IsEnabled = true;
                         instance.FormattingMethodComboBox.IsEnabled = true;
+                        instance.VideoEncodingComboBox.IsEnabled = true;
+                        instance.AudioEncodingComboBox.IsEnabled = true;
                         instance.VideoDownloadPathButton.IsEnabled = true;
                         instance.SelectedDetailedFormatTextBox.IsEnabled = true;
                         instance.FormatSelectionButton.IsEnabled = true;
@@ -197,7 +211,8 @@ public class MainWindowViewModel : ViewModelBase
             var downloadedFilePath = GetDownloadedFilePath(downloadWorkDirectory, fileName);
 
             var finalFilePath = Path.Combine(downloadPath, Path.ChangeExtension(fileName, format));
-            RunFfmpegProcessing(ffmpegPath, downloadedFilePath, finalFilePath, format, formattingMethod, onlyAudio);
+            RunFfmpegProcessing(ffmpegPath, downloadedFilePath, finalFilePath, format, formattingMethod, onlyAudio,
+                videoEncoding, audioEncoding);
 
             try
             {
@@ -215,15 +230,31 @@ public class MainWindowViewModel : ViewModelBase
                 instance.UrlTextBox.IsEnabled = true;
                 instance.FinalFormatComboBox.IsEnabled = true;
                 instance.FormattingMethodComboBox.IsEnabled = true;
+                instance.VideoEncodingComboBox.IsEnabled = true;
+                instance.AudioEncodingComboBox.IsEnabled = true;
                 instance.VideoDownloadPathButton.IsEnabled = true;
                 instance.SelectedDetailedFormatTextBox.IsEnabled = true;
                 instance.FormatSelectionButton.IsEnabled = true;
                 instance.UpdateToolPreferenceControls();
                 instance.CurrentDownloadProgressBar.IsIndeterminate = false;
+                ResetDownloadProgressLabels(instance);
                 instance.ErrorTextBlock.Text = "";
                 instance.UrlTextBox.Text = "";
                 instance.StatusLabel.Text = "Done! Ready to download next video!";
             });
+            }
+            catch (Exception ex)
+            {
+                Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    RestoreDownloadControls(instance);
+                    instance.CurrentDownloadProgressBar.IsIndeterminate = false;
+                    ResetDownloadProgressLabels(instance);
+                    instance.ErrorTextBlock.Text = ex.Message;
+                    instance.ErrorTextBlock.IsVisible = true;
+                    instance.StatusLabel.Text = "Ready";
+                });
+            }
         });
 
         thread.Start();
@@ -233,6 +264,8 @@ public class MainWindowViewModel : ViewModelBase
         instance.UrlTextBox.IsEnabled = false;
         instance.FinalFormatComboBox.IsEnabled = false;
         instance.FormattingMethodComboBox.IsEnabled = false;
+        instance.VideoEncodingComboBox.IsEnabled = false;
+        instance.AudioEncodingComboBox.IsEnabled = false;
         instance.VideoDownloadPathButton.IsEnabled = false;
         instance.SelectedDetailedFormatTextBox.IsEnabled = false;
         instance.FormatSelectionButton.IsEnabled = false;
@@ -264,12 +297,12 @@ public class MainWindowViewModel : ViewModelBase
             var formats = GetFormats(instance.YtDlPath, instance.UrlTextBox.Text ?? "");
             var dialogViewModel = new FormatSelectionDialogViewModel(formats, _customFormatSelector);
             var dialog = new FormatSelectionDialogView(dialogViewModel);
-            var selectedFormat = await dialog.ShowDialog<string?>(instance);
+            var selectedFormat = await dialog.ShowDialog<FormatSelectionResult?>(instance);
 
             if (selectedFormat != null)
             {
-                _customFormatSelector = selectedFormat.Length == 0 ? null : selectedFormat;
-                SelectedDetailedFormatText = _customFormatSelector ?? "Automatic";
+                _customFormatSelector = selectedFormat.Selector.Length == 0 ? null : selectedFormat.Selector;
+                SelectedDetailedFormatText = selectedFormat.Summary;
             }
 
             instance.StatusLabel.Text = "Ready";
@@ -419,6 +452,28 @@ public class MainWindowViewModel : ViewModelBase
             : customFormatSelector.Trim();
     }
 
+    private static string GetSelectedComboBoxText(ComboBox comboBox, string fallback)
+    {
+        return comboBox.SelectedItem is ComboBoxItem item
+            ? item.Content?.ToString() ?? fallback
+            : fallback;
+    }
+
+    private static void RestoreDownloadControls(MainWindow instance)
+    {
+        instance.DownloadButton.IsEnabled = true;
+        instance.VideoDownloadPathTextBox.IsEnabled = true;
+        instance.UrlTextBox.IsEnabled = true;
+        instance.FinalFormatComboBox.IsEnabled = true;
+        instance.FormattingMethodComboBox.IsEnabled = true;
+        instance.VideoEncodingComboBox.IsEnabled = true;
+        instance.AudioEncodingComboBox.IsEnabled = true;
+        instance.VideoDownloadPathButton.IsEnabled = true;
+        instance.SelectedDetailedFormatTextBox.IsEnabled = true;
+        instance.FormatSelectionButton.IsEnabled = true;
+        instance.UpdateToolPreferenceControls();
+    }
+
     private static ObservableCollection<YtDlpFormatOption> GetFormats(string ytDlpPath, string url)
     {
         var process = new Process
@@ -426,7 +481,7 @@ public class MainWindowViewModel : ViewModelBase
             StartInfo = new ProcessStartInfo
             {
                 FileName = ytDlpPath,
-                Arguments = $"-F {Quote(url)}",
+                Arguments = $"-J {Quote(url)}",
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -441,59 +496,120 @@ public class MainWindowViewModel : ViewModelBase
 
         if (process.ExitCode != 0) throw new InvalidOperationException(error.Trim());
 
-        var formats = new ObservableCollection<YtDlpFormatOption>();
-        foreach (var line in output.Split(Environment.NewLine))
-        {
-            var trimmed = line.Trim();
-            if (trimmed.Length == 0 || trimmed.StartsWith("[")) continue;
-            if (trimmed.StartsWith("ID ") || trimmed.StartsWith("---")) continue;
+        return ParseFormatsFromJson(output);
+    }
 
-            var formatId = trimmed.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+    private static ObservableCollection<YtDlpFormatOption> ParseFormatsFromJson(string json)
+    {
+        var formats = new ObservableCollection<YtDlpFormatOption>();
+        using var document = JsonDocument.Parse(json);
+        if (!document.RootElement.TryGetProperty("formats", out var formatElements)) return formats;
+
+        foreach (var formatElement in formatElements.EnumerateArray())
+        {
+            var formatId = GetJsonString(formatElement, "format_id");
             if (string.IsNullOrWhiteSpace(formatId)) continue;
 
-            formats.Add(new YtDlpFormatOption(formatId, trimmed));
+            formats.Add(new YtDlpFormatOption
+            {
+                FormatId = formatId,
+                Extension = GetJsonString(formatElement, "ext"),
+                Resolution = GetJsonString(formatElement, "resolution"),
+                Width = GetJsonInt(formatElement, "width"),
+                Height = GetJsonInt(formatElement, "height"),
+                Fps = GetJsonDouble(formatElement, "fps"),
+                VideoCodec = GetJsonString(formatElement, "vcodec"),
+                AudioCodec = GetJsonString(formatElement, "acodec"),
+                TotalBitrate = GetJsonDouble(formatElement, "tbr"),
+                AudioBitrate = GetJsonDouble(formatElement, "abr"),
+                FileSize = GetJsonLong(formatElement, "filesize") ?? GetJsonLong(formatElement, "filesize_approx"),
+                Protocol = GetJsonString(formatElement, "protocol")
+            });
         }
 
         return formats;
     }
 
+    private static string GetJsonString(JsonElement element, string propertyName)
+    {
+        if (!element.TryGetProperty(propertyName, out var property)) return "";
+        return property.ValueKind == JsonValueKind.String ? property.GetString() ?? "" : property.ToString();
+    }
+
+    private static int? GetJsonInt(JsonElement element, string propertyName)
+    {
+        if (!element.TryGetProperty(propertyName, out var property) || property.ValueKind == JsonValueKind.Null)
+            return null;
+        return property.TryGetInt32(out var value) ? value : null;
+    }
+
+    private static long? GetJsonLong(JsonElement element, string propertyName)
+    {
+        if (!element.TryGetProperty(propertyName, out var property) || property.ValueKind == JsonValueKind.Null)
+            return null;
+        return property.TryGetInt64(out var value) ? value : null;
+    }
+
+    private static double? GetJsonDouble(JsonElement element, string propertyName)
+    {
+        if (!element.TryGetProperty(propertyName, out var property) || property.ValueKind == JsonValueKind.Null)
+            return null;
+        return property.TryGetDouble(out var value) ? value : null;
+    }
+
     private void RunFfmpegProcessing(string ffmpegPath, string inputPath, string outputPath, string targetContainer,
-        string formattingMethod, bool onlyAudio)
+        string formattingMethod, bool onlyAudio, string videoEncoding, string audioEncoding)
     {
         if (!File.Exists(inputPath)) throw new FileNotFoundException("Downloaded file was not found.", inputPath);
 
         if (formattingMethod == "recode")
         {
-            RunFfmpeg(ffmpegPath, GetReencodeArguments(inputPath, outputPath, targetContainer, onlyAudio),
+            var result = RunFfmpeg(ffmpegPath, GetReencodeArguments(inputPath, outputPath, targetContainer, onlyAudio,
+                    videoEncoding, audioEncoding),
                 "Re-Encoding... This may take a while! Please be patient!", false);
+            if (!result.Success)
+                throw CreateReencodeException(targetContainer, videoEncoding, audioEncoding, result.ErrorOutput);
+
             SetProcessingInfo($"Re-encoded to .{targetContainer} because re-encoding was selected.");
             return;
         }
 
         var remuxSucceeded = RunFfmpeg(ffmpegPath, GetRemuxArguments(inputPath, outputPath, onlyAudio),
-            "Remuxing... (This may take a while)", formattingMethod == "auto");
-        if (remuxSucceeded)
+            "Remuxing... (This may take a while)", true);
+        if (remuxSucceeded.Success)
         {
             SetProcessingInfo($"Remuxed to .{targetContainer}; the downloaded codecs were accepted by the target container.");
             return;
         }
 
+        if (formattingMethod == "remux")
+            throw CreateRemuxException(targetContainer, remuxSucceeded.ErrorOutput);
+
         if (File.Exists(outputPath)) File.Delete(outputPath);
-        RunFfmpeg(ffmpegPath, GetReencodeArguments(inputPath, outputPath, targetContainer, onlyAudio),
+        var fallbackResult = RunFfmpeg(ffmpegPath, GetReencodeArguments(inputPath, outputPath, targetContainer, onlyAudio,
+                videoEncoding, audioEncoding),
             "Re-Encoding... The target container needs compatible codecs.", false);
+        if (!fallbackResult.Success)
+            throw CreateReencodeException(targetContainer, videoEncoding, audioEncoding, fallbackResult.ErrorOutput);
+
         SetProcessingInfo($"Re-encoded to .{targetContainer}; direct remuxing was not compatible with the target container.");
     }
 
-    private bool RunFfmpeg(string ffmpegPath, string arguments, string statusText, bool allowFailure)
+    private FfmpegResult RunFfmpeg(string ffmpegPath, string arguments, string statusText, bool allowFailure)
     {
         var instance = MainWindow.GetInstance();
         TimeSpan? duration = null;
+        var errorOutput = new StringBuilder();
         Dispatcher.UIThread.InvokeAsync(() =>
         {
             instance.StatusLabel.Text = statusText;
             instance.CurrentDownloadProgressBar.IsIndeterminate = false;
             instance.CurrentDownloadProgressBar.Value = 0;
+            SetFfmpegProgressLabels(instance);
             instance.CurrentDownloadPercentageTextBlock.Text = "0%";
+            instance.DownloadSizeTextBlock.Text = "00:00:00";
+            instance.DownloadSpeedTextBlock.Text = "0x";
+            instance.RemainingTimeTextBlock.Text = "--:--";
         }).Wait();
 
         var process = new Process
@@ -513,16 +629,22 @@ public class MainWindowViewModel : ViewModelBase
         {
             var line = process.StandardError.ReadLine();
             if (line == null) continue;
+            errorOutput.AppendLine(line);
 
             duration ??= TryReadDuration(line);
             var current = TryReadProgressTime(line);
+            var speed = TryReadSpeed(line);
             if (duration == null || current == null || duration.Value.TotalSeconds <= 0) continue;
 
             var percent = Math.Min(100, current.Value.TotalSeconds / duration.Value.TotalSeconds * 100);
+            var eta = CalculateEta(current.Value, duration.Value, speed);
             Dispatcher.UIThread.InvokeAsync(() =>
             {
                 instance.CurrentDownloadProgressBar.Value = percent;
                 instance.CurrentDownloadPercentageTextBlock.Text = Math.Round(percent, 1) + "%";
+                instance.DownloadSizeTextBlock.Text = FormatTime(current.Value) + " / " + FormatTime(duration.Value);
+                instance.DownloadSpeedTextBlock.Text = speed != null ? Math.Round(speed.Value, 2) + "x" : "--";
+                instance.RemainingTimeTextBlock.Text = eta != null ? FormatTime(eta.Value) : "--:--";
             });
         }
 
@@ -533,22 +655,46 @@ public class MainWindowViewModel : ViewModelBase
             {
                 instance.CurrentDownloadProgressBar.Value = 100;
                 instance.CurrentDownloadPercentageTextBlock.Text = "100%";
+                instance.RemainingTimeTextBlock.Text = "00:00";
             }).Wait();
-            return true;
+            return new FfmpegResult(true, errorOutput.ToString());
         }
 
-        if (allowFailure) return false;
-        throw new InvalidOperationException("ffmpeg failed to process the selected format.");
+        var error = errorOutput.ToString();
+        if (allowFailure) return new FfmpegResult(false, error);
+        return new FfmpegResult(false, error);
     }
+
+    private static InvalidOperationException CreateRemuxException(string targetContainer, string ffmpegError)
+    {
+        return new InvalidOperationException(
+            $"Cannot remux into .{targetContainer}. The selected target container does not support one or more codecs from the downloaded YouTube format. Select Auto or Re-Encode, or choose different detailed formats/codecs.\n\nffmpeg output:\n{GetRelevantFfmpegError(ffmpegError)}");
+    }
+
+    private static InvalidOperationException CreateReencodeException(string targetContainer, string videoEncoding,
+        string audioEncoding, string ffmpegError)
+    {
+        return new InvalidOperationException(
+            $"Cannot re-encode into .{targetContainer} with video encoder '{videoEncoding}' and audio encoder '{audioEncoding}'. The selected codec/container combination may be incompatible, or your ffmpeg build may not include that encoder. Choose Auto or a codec supported by the target container.\n\nffmpeg output:\n{GetRelevantFfmpegError(ffmpegError)}");
+    }
+
+    private static string GetRelevantFfmpegError(string ffmpegError)
+    {
+        var lines = ffmpegError.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
+        return string.Join(Environment.NewLine, lines.TakeLast(Math.Min(lines.Length, 12)));
+    }
+
+    private readonly record struct FfmpegResult(bool Success, string ErrorOutput);
 
     private static string GetRemuxArguments(string inputPath, string outputPath, bool onlyAudio)
     {
         return $"-y -i {Quote(inputPath)} {(onlyAudio ? "-vn " : "")}-c copy {Quote(outputPath)}";
     }
 
-    private static string GetReencodeArguments(string inputPath, string outputPath, string targetContainer, bool onlyAudio)
+    private static string GetReencodeArguments(string inputPath, string outputPath, string targetContainer, bool onlyAudio,
+        string videoEncoding, string audioEncoding)
     {
-        var audioCodec = targetContainer switch
+        var audioCodec = audioEncoding == "Auto" ? targetContainer switch
         {
             "mp3" => "libmp3lame",
             "flac" => "flac",
@@ -556,17 +702,17 @@ public class MainWindowViewModel : ViewModelBase
             "ogg" => "libvorbis",
             "webm" => "libopus",
             _ => "aac"
-        };
+        } : audioEncoding;
 
         if (onlyAudio) return $"-y -i {Quote(inputPath)} -vn -c:a {audioCodec} {Quote(outputPath)}";
 
-        var videoCodec = targetContainer switch
+        var videoCodec = videoEncoding == "Auto" ? targetContainer switch
         {
             "webm" => "libvpx-vp9",
             "flv" => "flv",
             "avi" => "mpeg4",
             _ => "libx264"
-        };
+        } : videoEncoding;
 
         return $"-y -i {Quote(inputPath)} -c:v {videoCodec} -c:a {audioCodec} {Quote(outputPath)}";
     }
@@ -599,6 +745,53 @@ public class MainWindowViewModel : ViewModelBase
         if (endIndex >= 0) value = value[..endIndex];
 
         return TimeSpan.TryParse(value, out var time) ? time : null;
+    }
+
+    private static double? TryReadSpeed(string line)
+    {
+        var speedIndex = line.IndexOf("speed=", StringComparison.Ordinal);
+        if (speedIndex < 0) return null;
+
+        var value = line[(speedIndex + 6)..].TrimStart();
+        var endIndex = value.IndexOf(' ');
+        if (endIndex >= 0) value = value[..endIndex];
+        value = value.TrimEnd('x');
+
+        return double.TryParse(value, out var speed) ? speed : null;
+    }
+
+    private static TimeSpan? CalculateEta(TimeSpan current, TimeSpan duration, double? speed)
+    {
+        if (speed == null || speed.Value <= 0) return null;
+
+        var remainingSeconds = Math.Max(0, duration.TotalSeconds - current.TotalSeconds) / speed.Value;
+        return TimeSpan.FromSeconds(remainingSeconds);
+    }
+
+    private static string FormatTime(TimeSpan time)
+    {
+        return time.TotalHours >= 1
+            ? time.ToString(@"hh\:mm\:ss")
+            : time.ToString(@"mm\:ss");
+    }
+
+    private static void SetFfmpegProgressLabels(MainWindow instance)
+    {
+        instance.DownloadSizeTextBlock.Text = "processed";
+        instance.DownloadOfTextBlock.Text = "";
+        instance.DownloadAtTextBlock.Text = "speed";
+        instance.DownloadEtaTextBlock.Text = "ETA";
+    }
+
+    private static void ResetDownloadProgressLabels(MainWindow instance)
+    {
+        instance.CurrentDownloadPercentageTextBlock.Text = "0%";
+        instance.DownloadOfTextBlock.Text = "of";
+        instance.DownloadSizeTextBlock.Text = "0MiB";
+        instance.DownloadAtTextBlock.Text = "at";
+        instance.DownloadSpeedTextBlock.Text = "0 KiB/s";
+        instance.DownloadEtaTextBlock.Text = "ETA";
+        instance.RemainingTimeTextBlock.Text = "00:00";
     }
 
     private static string Quote(string value)
@@ -697,23 +890,40 @@ public class MainWindowViewModel : ViewModelBase
                     ? "Remuxing... (This may take a while)"
                     : "Re-Encoding... This may take a while! Please be patient!";
             });
-        if (!text.Contains('%')) return;
-        if (!text.Contains("ETA")) return;
-        var percent = text.Split('%')[0].Replace("[download]", "").Replace(" ", "");
-        var downloadSpeed = text.Split('%')[1].Split("at")[1].Split("ETA")[0].Replace(" ", "");
-        var maxSize = text.Split('%')[1].Split(' ')[2];
-        var eta = text.Split('%')[1].Split("ETA")[1].Replace(" ", "");
+        if (!TryReadYtDlpDownloadProgress(text, out var downloadProgress)) return;
+
         Dispatcher.UIThread.InvokeAsync(() =>
         {
-            instance.CurrentDownloadProgressBar.Value = double.Parse(percent);
-            instance.CurrentDownloadPercentageTextBlock.Text = percent + "%";
-            instance.DownloadSpeedTextBlock.Text = downloadSpeed;
-            instance.RemainingTimeTextBlock.Text = eta;
-            instance.DownloadSizeTextBlock.Text = maxSize;
+            instance.CurrentDownloadProgressBar.Value = downloadProgress.Percent;
+            instance.CurrentDownloadPercentageTextBlock.Text = downloadProgress.PercentText + "%";
+            instance.DownloadSpeedTextBlock.Text = downloadProgress.Speed;
+            instance.RemainingTimeTextBlock.Text = downloadProgress.Eta;
+            instance.DownloadSizeTextBlock.Text = downloadProgress.TotalSize;
+            instance.DownloadOfTextBlock.Text = "of";
             instance.DownloadAtTextBlock.Text = "at";
             instance.DownloadEtaTextBlock.Text = "ETA";
         });
     }
+
+    private static bool TryReadYtDlpDownloadProgress(string text, out YtDlpDownloadProgress progress)
+    {
+        progress = default;
+        var match = Regex.Match(text,
+            @"\[download\]\s+(?<percent>\d+(?:\.\d+)?)%\s+of\s+~?\s*(?<size>\S+)\s+at\s+(?<speed>\S+)\s+ETA\s+(?<eta>\S+)");
+        if (!match.Success) return false;
+        if (!double.TryParse(match.Groups["percent"].Value, CultureInfo.InvariantCulture, out var percent)) return false;
+
+        progress = new YtDlpDownloadProgress(
+            percent,
+            match.Groups["percent"].Value,
+            match.Groups["size"].Value,
+            match.Groups["speed"].Value,
+            match.Groups["eta"].Value);
+        return true;
+    }
+
+    private readonly record struct YtDlpDownloadProgress(double Percent, string PercentText, string TotalSize,
+        string Speed, string Eta);
 
     public string FormattingMethod { get; set; } = "remux";
 

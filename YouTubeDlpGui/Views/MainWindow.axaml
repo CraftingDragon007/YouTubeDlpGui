@@ -76,6 +76,37 @@
         <TextBlock Name="ProcessingInfoTextBlock" Margin="10,0,10,10" Text="Auto will remux when possible and re-encode only when needed." TextWrapping="Wrap" />
         <WrapPanel>
             <StackPanel Margin="10">
+                <TextBlock>Video</TextBlock>
+                <TextBlock>Encoding:</TextBlock>
+            </StackPanel>
+            <ComboBox Name="VideoEncodingComboBox" Margin="10" SelectedIndex="0" MinWidth="120">
+                <ComboBoxItem>Auto</ComboBoxItem>
+                <ComboBoxItem>libx264</ComboBoxItem>
+                <ComboBoxItem>libx265</ComboBoxItem>
+                <ComboBoxItem>libsvtav1</ComboBoxItem>
+                <ComboBoxItem>librav1e</ComboBoxItem>
+                <ComboBoxItem>libaom-av1</ComboBoxItem>
+                <ComboBoxItem>libvpx-vp9</ComboBoxItem>
+                <ComboBoxItem>mpeg4</ComboBoxItem>
+                <ComboBoxItem>flv</ComboBoxItem>
+            </ComboBox>
+            <StackPanel Margin="10">
+                <TextBlock>Audio</TextBlock>
+                <TextBlock>Encoding:</TextBlock>
+            </StackPanel>
+            <ComboBox Name="AudioEncodingComboBox" Margin="10" SelectedIndex="0" MinWidth="120">
+                <ComboBoxItem>Auto</ComboBoxItem>
+                <ComboBoxItem>aac</ComboBoxItem>
+                <ComboBoxItem>libopus</ComboBoxItem>
+                <ComboBoxItem>libmp3lame</ComboBoxItem>
+                <ComboBoxItem>flac</ComboBoxItem>
+                <ComboBoxItem>pcm_s16le</ComboBoxItem>
+                <ComboBoxItem>libvorbis</ComboBoxItem>
+            </ComboBox>
+        </WrapPanel>
+        <TextBlock Margin="10,0,10,10" Text="Selecting a video or audio encoding is only used when the output is re-encoded. Choose Auto to let the target container decide compatible defaults." TextWrapping="Wrap" />
+        <WrapPanel>
+            <StackPanel Margin="10">
                 <TextBlock>Detailed</TextBlock>
                 <TextBlock>Format:</TextBlock>
             </StackPanel>
@@ -85,15 +116,15 @@
         <Button Margin="10" Name="DownloadButton" IsEnabled="True" Content="Download" HorizontalAlignment="Center"
                 VerticalAlignment="Center" Command="{Binding OnDownloadButtonClicked}" />
         <TextBlock Name="StatusLabel">Ready</TextBlock>
-        <WrapPanel>
-            <TextBlock Name="CurrentDownloadPercentageTextBlock" Margin="10">0%</TextBlock>
-            <TextBlock Margin="10">of</TextBlock>
-            <TextBlock Name="DownloadSizeTextBlock" Margin="10">0MiB</TextBlock>
-            <TextBlock Name="DownloadAtTextBlock" Margin="10">at</TextBlock>
-            <TextBlock Name="DownloadSpeedTextBlock" Margin="10">0 KiB/s</TextBlock>
-            <TextBlock Name="DownloadEtaTextBlock" Margin="10">ETA</TextBlock>
-            <TextBlock Name="RemainingTimeTextBlock" Margin="10">00:00</TextBlock>
-        </WrapPanel>
+        <Grid Margin="10" ColumnDefinitions="55,24,120,48,82,35,*">
+            <TextBlock Grid.Column="0" Name="CurrentDownloadPercentageTextBlock" TextAlignment="Right">0%</TextBlock>
+            <TextBlock Grid.Column="1" Name="DownloadOfTextBlock" Margin="8,0,0,0">of</TextBlock>
+            <TextBlock Grid.Column="2" Name="DownloadSizeTextBlock" Margin="8,0,0,0">0MiB</TextBlock>
+            <TextBlock Grid.Column="3" Name="DownloadAtTextBlock" Margin="8,0,0,0">at</TextBlock>
+            <TextBlock Grid.Column="4" Name="DownloadSpeedTextBlock" Margin="8,0,0,0">0 KiB/s</TextBlock>
+            <TextBlock Grid.Column="5" Name="DownloadEtaTextBlock" Margin="8,0,0,0">ETA</TextBlock>
+            <TextBlock Grid.Column="6" Name="RemainingTimeTextBlock" Margin="8,0,0,0">00:00</TextBlock>
+        </Grid>
         <ProgressBar Name="CurrentDownloadProgressBar" Value="0" />
     </StackPanel>
 
