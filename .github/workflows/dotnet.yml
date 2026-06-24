@@ -2,49 +2,39 @@ name: .NET CI
 
 on:
   push:
-    # Pattern matched against refs/tags
-    branches: master
+    branches:
+      - master
+
+permissions:
+  contents: write
 
 jobs:
   prepare:
     runs-on: ubuntu-latest
     outputs:
-      BUILD_ID: ${{ steps.buildnumber.outputs.build_number }}
-      SHA_SHORT: ${{ steps.commithash.outputs.sha_short }}
-      RELEASE_ID: ${{ steps.release.outputs.release_id }}
+      TAG_NAME: ${{ steps.release.outputs.tag_name }}
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v7
 
-      - name: Set outputs
-        id: commithash
-        run: echo "::set-output name=sha_short::$(git rev-parse --short HEAD)"
-
-      - name: Generate build number
-        id: buildnumber
-        uses: einaregilsson/build-number@v3
-        with:
-          token: ${{ secrets.github_token }}
-
-      - name: Create a release
+      - name: Create release
         id: release
-        uses: GamePowerX/pipe-to-release@2.0.3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag_name="build_${GITHUB_RUN_NUMBER}"
+          sha_short="$(git rev-parse --short HEAD)"
+          release_body="This is an automated build"$'\n\n'"Build ID: ${GITHUB_RUN_NUMBER}"
 
-          skip_errors: false
+          gh release create "$tag_name" \
+            --title "build:${sha_short}" \
+            --notes "$release_body"
 
-          draft: false
-          prerelease: false
-
-          tag: "build_${{ steps.buildnumber.outputs.build_number }}"
-          release_name: "build:${{ steps.commithash.outputs.sha_short }}"
-          release_body: "This is an automated build\n\nBuild ID: ${{ steps.buildnumber.outputs.build_number }}\n\n **Note**: On Mac Os, you need to download the .dylib files and put them in the same folder as the executable."
+          echo "tag_name=$tag_name" >> "$GITHUB_OUTPUT"
 
   buildMatrix:
     name: Publish for ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
-
     needs: prepare
 
     strategy:
@@ -52,37 +42,35 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            build: dotnet publish -c release -r linux-x64 -p:PublishSingleFile=true --self-contained true --verbosity Normal -p:PublishTrimmed=True -p:EnableCompressionInSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
-            filemap: |
-              YouTubeDlpGui/bin/Release/net6.0/linux-x64/publish/YouTubeDlpGui>YouTubeDlpGui-linux-amd64
+            runtime: linux-x64
+            asset_path: YouTubeDlpGui/bin/Release/net10.0/linux-x64/publish/YouTubeDlpGui
+            asset_name: YouTubeDlpGui-linux-amd64
           - os: windows-latest
-            build: dotnet publish -c release -r win-x64 -p:PublishSingleFile=true --self-contained true --verbosity Normal -p:PublishTrimmed=True -p:EnableCompressionInSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
-            filemap: |
-              YouTubeDlpGui/bin/Release/net6.0/win-x64/publish/YouTubeDlpGui.exe>YouTubeDlpGui-windows-amd64.exe
+            runtime: win-x64
+            asset_path: YouTubeDlpGui/bin/Release/net10.0/win-x64/publish/YouTubeDlpGui.exe
+            asset_name: YouTubeDlpGui-windows-amd64.exe
           - os: macos-latest
-            build: dotnet publish -c release -r osx-x64 -p:PublishSingleFile=true --self-contained true --verbosity Normal -p:PublishTrimmed=True -p:EnableCompressionInSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
-            filemap: |
-              YouTubeDlpGui/bin/Release/net6.0/osx-x64/publish/YouTubeDlpGui>YouTubeDlpGui-macos-amd64
-              YouTubeDlpGui/bin/Release/net6.0/osx-x64/publish/libAvaloniaNative.dylib>libAvaloniaNative.dylib
-              YouTubeDlpGui/bin/Release/net6.0/osx-x64/publish/libHarfBuzzSharp.dylib>libHarfBuzzSharp.dylib
-              YouTubeDlpGui/bin/Release/net6.0/osx-x64/publish/libSkiaSharp.dylib>libSkiaSharp.dylib
+            runtime: osx-x64
+            asset_path: YouTubeDlpGui/bin/Release/net10.0/osx-x64/publish/YouTubeDlpGui
+            asset_name: YouTubeDlpGui-macos-amd64
+
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v7
+
       - name: Setup .NET
-        uses: actions/setup-dotnet@v1
+        uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: 6.0.x
+          dotnet-version: 10.0.x
+
       - name: Restore dependencies
         run: dotnet restore
-      - name: Build
-        run: ${{ matrix.build }}
-      - name: Pipe files to release
-        uses: GamePowerX/pipe-to-release@2.0.3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          
-          filemap: ${{ matrix.filemap }}
-          
-          skip_errors: false
-          
-          release_id: ${{ needs.prepare.outputs.RELEASE_ID }}
+
+      - name: Publish
+        run: dotnet publish -c Release -r ${{ matrix.runtime }} -p:PublishSingleFile=true --self-contained true --verbosity normal -p:PublishTrimmed=true -p:EnableCompressionInSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+
+      - name: Upload executable to release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ needs.prepare.outputs.TAG_NAME }}
+        run: gh release upload "$TAG_NAME" "${{ matrix.asset_path }}#${{ matrix.asset_name }}" --clobber
